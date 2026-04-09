@@ -66,8 +66,8 @@ RUN apt-get update -qq \
 RUN mkdir -p /prebuilt \
     && if [ -n "${IBCTL_VERSION}" ]; then \
         echo "Downloading pre-built ibctl ${IBCTL_VERSION}" \
-        && curl -sL -o /prebuilt/ibctl "https://github.com/Lcstyle/ibctl/releases/download/${IBCTL_VERSION}/ibctl" \
-        && curl -sL -o /prebuilt/ibctl-agent.jar "https://github.com/Lcstyle/ibctl/releases/download/${IBCTL_VERSION}/ibctl-agent.jar" \
+        && curl -sL -o /prebuilt/ibctl "https://github.com/uranuswch/ibctl/releases/download/${IBCTL_VERSION}/ibctl" \
+        && curl -sL -o /prebuilt/ibctl-agent.jar "https://github.com/uranuswch/ibctl/releases/download/${IBCTL_VERSION}/ibctl-agent.jar" \
         && chmod +x /prebuilt/ibctl; \
     else \
         echo "No IBCTL_VERSION — will build from source" \
@@ -176,7 +176,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 ENTRYPOINT ["/opt/ibctl/entrypoint.sh"]
 
-LABEL org.opencontainers.image.source=https://github.com/Lcstyle/ibctl
+LABEL org.opencontainers.image.source=https://github.com/uranuswch/ibctl
 LABEL org.opencontainers.image.description="IBC replacement for automated IB Gateway/TWS login and session management"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.version=${IB_GATEWAY_VERSION}
