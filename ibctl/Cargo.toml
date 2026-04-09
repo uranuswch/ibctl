@@ -19,6 +19,8 @@ futures-core = "0.3"
 secrecy = "0.10"
 jiff = "0.2"
 nix = { version = "0.30", features = ["signal", "process"] }
+totp-lite = "2"
+base32 = "0.5"
 
 [lints]
 workspace = true
