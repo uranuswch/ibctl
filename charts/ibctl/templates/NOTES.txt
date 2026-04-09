@@ -1,0 +1,11 @@
+1. Get the dashboard service URL:
+   kubectl get svc {{ include "ibctl.fullname" . }} -n {{ .Release.Namespace }}
+
+2. If ingress is enabled, browse to the configured host under:
+   {{- range .Values.dashboard.ingress.hosts }}
+   http{{ if $.Values.dashboard.ingress.tls }}s{{ end }}://{{ .host }}
+   {{- end }}
+
+3. The dashboard password, if enabled, is the `IBCTL_DASHBOARD_TOKEN` value in the generated secret:
+   kubectl get secret {{ include "ibctl.secretName" . }} -n {{ .Release.Namespace }} -o yaml
+

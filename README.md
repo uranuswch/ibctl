@@ -124,7 +124,33 @@ For dual mode (live + paper simultaneously):
 | `IBCTL_COMMAND_PORT` | TCP command server port | `7462` |
 | `IBCTL_LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |
 
+### Dashboard notifications
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `IBCTL_NOTIFICATIONS_ENABLED` | Enable dashboard notifications | `false` |
+| `IBCTL_NOTIFICATION_CHANNEL` | `ntfy`, `slack`, or `telegram` | `ntfy` |
+| `IBCTL_NOTIFICATIONS_CONFIG` | Path to dashboard notification config JSON | `/opt/ibctl/dashboard/notifications.json` |
+| `IBCTL_NTFY_URL` | ntfy server URL | `https://ntfy.sh` |
+| `IBCTL_NTFY_TOPIC` | ntfy topic name | `ibctl` |
+| `IBCTL_NTFY_TOKEN` | ntfy bearer token | — |
+| `IBCTL_SLACK_WEBHOOK_URL` | Slack incoming webhook URL | — |
+| `IBCTL_TELEGRAM_BOT_TOKEN` | Telegram bot token | — |
+| `IBCTL_TELEGRAM_CHAT_ID` | Telegram chat ID | — |
+
 Docker secrets are supported: any variable can use `_FILE` suffix to read from a file (e.g., `TWS_PASSWORD_FILE=/run/secrets/ib_password`).
+
+The dashboard Notifications tab can now send alerts for initial login failures in addition to the existing operational events. `login_failed` fires when the login flow enters a terminal `Error(...)` transition and ibctl starts a retry.
+
+### Dashboard auth
+
+Set `IBCTL_DASHBOARD_TOKEN` to protect the dashboard. That same secret now works in three ways:
+
+- Browser login form at `/login` using a password field
+- `Authorization: Bearer <token>` for API clients and scripts
+- HTTP Basic auth using the token as the password
+
+The browser login stores an `HttpOnly` session cookie after successful sign-in.
 
 ## IBC-compatible command server
 
@@ -194,6 +220,16 @@ Or use the multi-stage Docker build (no local toolchain needed):
 ```bash
 docker build -t ibctl .
 ```
+
+## Kubernetes
+
+Kubernetes material is available in two forms:
+
+- [charts/ibctl](charts/ibctl) is a real Helm chart
+- [k8s/kubernetes.example.yaml](k8s/kubernetes.example.yaml) is a plain manifest-based deployment example
+- [k8s/helm-values.example.yaml](k8s/helm-values.example.yaml) is a Helm values reference/example
+
+They mirror the current container env vars and exposed ports from `docker-compose.yml`.
 
 ## License
 

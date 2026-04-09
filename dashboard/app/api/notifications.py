@@ -19,9 +19,13 @@ router = APIRouter()
 
 class NotificationConfigRequest(BaseModel):
     enabled: bool = False
+    channel: str = "ntfy"
     ntfy_url: str = "https://ntfy.sh"
     ntfy_topic: str = "ibctl"
     ntfy_token: str = ""
+    slack_webhook_url: str = ""
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
     events: dict = {}
 
 
@@ -41,9 +45,13 @@ async def save_notification_config(request: Request, body: NotificationConfigReq
 
     config = NotificationConfig(
         enabled=body.enabled,
+        channel=body.channel,
         ntfy_url=body.ntfy_url,
         ntfy_topic=body.ntfy_topic,
         ntfy_token=body.ntfy_token,
+        slack_webhook_url=body.slack_webhook_url,
+        telegram_bot_token=body.telegram_bot_token,
+        telegram_chat_id=body.telegram_chat_id,
         events=body.events,
     )
     config.save()

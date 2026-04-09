@@ -1,7 +1,8 @@
-"""Notification service for ibctl dashboard — ntfy.sh integration.
+"""Notification service for ibctl dashboard.
 
-Sends alerts for operational events: no clients connected, session loss,
-re-login failures, warm restarts, IB maintenance status changes.
+Supports ntfy.sh, Slack incoming webhooks, and Telegram bot delivery.
+Sends alerts for operational events: login failures, no clients connected,
+session loss, re-login failures, warm restarts, IB maintenance status changes.
 
 Configuration stored in notifications.json, editable via dashboard UI.
 Disabled by default — enable via IBCTL_NOTIFICATIONS_ENABLED=true or
@@ -15,6 +16,7 @@ import json
 import logging
 import os
 import time
+from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -42,10 +44,15 @@ class NotificationEvent:
 class NotificationConfig:
     """Notification system configuration."""
     enabled: bool = False
+    channel: str = "ntfy"
     ntfy_url: str = "https://ntfy.sh"
     ntfy_topic: str = "ibctl"
     ntfy_token: str = ""
+    slack_webhook_url: str = ""
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
     events: dict[str, dict[str, Any]] = field(default_factory=lambda: {
+        "login_failed": {"enabled": True},
         "no_clients": {"enabled": True, "timeout_minutes": 30},
         "session_lost": {"enabled": True},
         "relogin_failed": {"enabled": True},
@@ -56,10 +63,18 @@ class NotificationConfig:
     def to_dict(self) -> dict:
         return {
             "enabled": self.enabled,
+            "channel": self.channel,
             "ntfy": {
                 "url": self.ntfy_url,
                 "topic": self.ntfy_topic,
                 "token": self.ntfy_token,
+            },
+            "slack": {
+                "webhook_url": self.slack_webhook_url,
+            },
+            "telegram": {
+                "bot_token": self.telegram_bot_token,
+                "chat_id": self.telegram_chat_id,
             },
             "events": self.events,
         }
@@ -67,11 +82,17 @@ class NotificationConfig:
     @classmethod
     def from_dict(cls, data: dict) -> NotificationConfig:
         ntfy = data.get("ntfy", {})
+        slack = data.get("slack", {})
+        telegram = data.get("telegram", {})
         return cls(
             enabled=data.get("enabled", False),
+            channel=data.get("channel", "ntfy"),
             ntfy_url=ntfy.get("url", "https://ntfy.sh"),
             ntfy_topic=ntfy.get("topic", "ibctl"),
             ntfy_token=ntfy.get("token", ""),
+            slack_webhook_url=slack.get("webhook_url", ""),
+            telegram_bot_token=telegram.get("bot_token", ""),
+            telegram_chat_id=telegram.get("chat_id", ""),
             events=data.get("events", cls().events),
         )
 
@@ -96,12 +117,20 @@ class NotificationConfig:
         # Layer: env var overrides (highest precedence)
         if os.environ.get("IBCTL_NOTIFICATIONS_ENABLED", "").lower() in ("true", "1", "yes"):
             config.enabled = True
+        if channel := os.environ.get("IBCTL_NOTIFICATION_CHANNEL"):
+            config.channel = channel
         if url := os.environ.get("IBCTL_NTFY_URL"):
             config.ntfy_url = url
         if topic := os.environ.get("IBCTL_NTFY_TOPIC"):
             config.ntfy_topic = topic
         if token := os.environ.get("IBCTL_NTFY_TOKEN"):
             config.ntfy_token = token
+        if webhook := os.environ.get("IBCTL_SLACK_WEBHOOK_URL"):
+            config.slack_webhook_url = webhook
+        if token := os.environ.get("IBCTL_TELEGRAM_BOT_TOKEN"):
+            config.telegram_bot_token = token
+        if chat_id := os.environ.get("IBCTL_TELEGRAM_CHAT_ID"):
+            config.telegram_chat_id = chat_id
 
         return config
 
@@ -116,7 +145,26 @@ class NotificationConfig:
             logger.error("Failed to save notification config to %s: %s", config_path, e)
 
 
-class NtfyClient:
+class NotificationClient(ABC):
+    """Transport interface for notification providers."""
+
+    @abstractmethod
+    async def send(self, title: str, body: str, priority: str = "default", tags: str = "") -> bool:
+        raise NotImplementedError
+
+
+class NullClient(NotificationClient):
+    """Fallback client used for unsupported or incomplete config."""
+
+    def __init__(self, reason: str):
+        self._reason = reason
+
+    async def send(self, title: str, body: str, priority: str = "default", tags: str = "") -> bool:
+        logger.warning("Notification dropped: %s", self._reason)
+        return False
+
+
+class NtfyClient(NotificationClient):
     """Async HTTP client for ntfy.sh push notifications."""
 
     def __init__(self, url: str, topic: str, token: str = ""):
@@ -150,6 +198,69 @@ class NtfyClient:
             return False
 
 
+class SlackWebhookClient(NotificationClient):
+    """Async HTTP client for Slack incoming webhooks."""
+
+    def __init__(self, webhook_url: str):
+        self._webhook_url = webhook_url
+
+    async def send(self, title: str, body: str, priority: str = "default", tags: str = "") -> bool:
+        import httpx
+
+        lines = [f"*{title}*", body]
+        if priority and priority != "default":
+            lines.append(f"Priority: {priority}")
+        if tags:
+            lines.append(f"Tags: {tags}")
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(self._webhook_url, json={"text": "\n".join(lines)})
+                if resp.status_code == 200:
+                    logger.info("Slack notification sent: %s", title)
+                    return True
+                logger.warning("Slack notification failed (HTTP %d): %s", resp.status_code, resp.text[:200])
+                return False
+        except Exception as e:
+            logger.error("Slack notification send error: %s", e)
+            return False
+
+
+class TelegramClient(NotificationClient):
+    """Async HTTP client for Telegram bot notifications."""
+
+    def __init__(self, bot_token: str, chat_id: str):
+        self._bot_token = bot_token
+        self._chat_id = chat_id
+
+    async def send(self, title: str, body: str, priority: str = "default", tags: str = "") -> bool:
+        import httpx
+
+        url = f"https://api.telegram.org/bot{self._bot_token}/sendMessage"
+        parts = [f"*{title}*", body]
+        if priority and priority != "default":
+            parts.append(f"Priority: {priority}")
+        if tags:
+            parts.append(f"Tags: {tags}")
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json={
+                    "chat_id": self._chat_id,
+                    "text": "\n".join(parts),
+                    "parse_mode": "Markdown",
+                    "disable_web_page_preview": True,
+                })
+                if resp.status_code == 200:
+                    logger.info("Telegram notification sent: %s", title)
+                    return True
+                logger.warning("Telegram notification failed (HTTP %d): %s", resp.status_code, resp.text[:200])
+                return False
+        except Exception as e:
+            logger.error("Telegram notification send error: %s", e)
+            return False
+
+
 class NotificationService:
     """Manages notification config, sends alerts, deduplicates."""
 
@@ -162,8 +273,18 @@ class NotificationService:
         self._last_sent: dict[str, float] = {}  # event_type → timestamp (dedup)
         self._cooldown_secs = 300  # Don't re-send same event type within 5 min
 
-    def _make_client(self) -> NtfyClient:
-        return NtfyClient(self.config.ntfy_url, self.config.ntfy_topic, self.config.ntfy_token)
+    def _make_client(self) -> NotificationClient:
+        if self.config.channel == "ntfy":
+            return NtfyClient(self.config.ntfy_url, self.config.ntfy_topic, self.config.ntfy_token)
+        if self.config.channel == "slack":
+            if not self.config.slack_webhook_url:
+                return NullClient("Slack channel selected but webhook URL is empty")
+            return SlackWebhookClient(self.config.slack_webhook_url)
+        if self.config.channel == "telegram":
+            if not self.config.telegram_bot_token or not self.config.telegram_chat_id:
+                return NullClient("Telegram channel selected but bot token or chat id is empty")
+            return TelegramClient(self.config.telegram_bot_token, self.config.telegram_chat_id)
+        return NullClient(f"Unsupported notification channel: {self.config.channel}")
 
     def update_config(self, config: NotificationConfig):
         """Update config and recreate client."""
