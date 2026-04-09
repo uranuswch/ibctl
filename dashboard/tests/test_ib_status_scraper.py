@@ -1,7 +1,8 @@
-"""Tests for IB System Status scraper — ping-based connectivity checks."""
+"""Tests for IB System Status scraper — TCP-based connectivity checks."""
 
 from __future__ import annotations
 
+import socket
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -22,55 +23,57 @@ def scraper():
     return IBStatusScraper(config)
 
 
-class TestPing:
-    """Test the _ping static method."""
+class TestCheckHost:
+    """Test the _check_host static method (TCP socket connectivity)."""
 
-    @patch("app.services.ib_status_scraper.subprocess.run")
-    def test_ping_success(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        assert IBStatusScraper._ping("example.com") is True
-        mock_run.assert_called_once_with(
-            ["ping", "-c", "1", "-W", "3", "example.com"],
-            capture_output=True, timeout=5,
-        )
+    @patch("app.services.ib_status_scraper.socket.create_connection")
+    def test_host_reachable(self, mock_conn):
+        mock_conn.return_value.__enter__ = MagicMock(return_value=MagicMock())
+        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+        assert IBStatusScraper._check_host("example.com") is True
 
-    @patch("app.services.ib_status_scraper.subprocess.run")
-    def test_ping_failure(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1)
-        assert IBStatusScraper._ping("unreachable.example") is False
+    @patch("app.services.ib_status_scraper.socket.create_connection")
+    def test_host_unreachable(self, mock_conn):
+        mock_conn.side_effect = socket.timeout("timed out")
+        assert IBStatusScraper._check_host("unreachable.example") is False
 
-    @patch("app.services.ib_status_scraper.subprocess.run")
-    def test_ping_timeout(self, mock_run):
-        import subprocess
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="ping", timeout=5)
-        assert IBStatusScraper._ping("slow.example") is False
+    @patch("app.services.ib_status_scraper.socket.create_connection")
+    def test_host_connection_refused_treated_as_reachable(self, mock_conn):
+        # ECONNREFUSED means the host is up, port just not open
+        mock_conn.side_effect = ConnectionRefusedError()
+        assert IBStatusScraper._check_host("example.com") is True
 
-    @patch("app.services.ib_status_scraper.subprocess.run")
-    def test_ping_no_binary(self, mock_run):
-        mock_run.side_effect = FileNotFoundError("ping not found")
-        assert IBStatusScraper._ping("example.com") is False
+    @patch("app.services.ib_status_scraper.socket.create_connection")
+    def test_host_os_error(self, mock_conn):
+        mock_conn.side_effect = OSError("network unreachable")
+        assert IBStatusScraper._check_host("example.com") is False
+
+    @patch("app.services.ib_status_scraper.socket.create_connection")
+    def test_host_dns_error(self, mock_conn):
+        mock_conn.side_effect = socket.gaierror("name or service not known")
+        assert IBStatusScraper._check_host("bad-host.example") is False
 
 
 class TestCheckBackends:
-    """Test backend connectivity via ping."""
+    """Test backend connectivity via TCP."""
 
-    @patch.object(IBStatusScraper, "_ping")
-    def test_both_reachable(self, mock_ping, scraper):
-        mock_ping.return_value = True
+    @patch.object(IBStatusScraper, "_check_host")
+    def test_both_reachable(self, mock_check, scraper):
+        mock_check.return_value = True
         ok, hosts = scraper.check_backends()
         assert ok is True
         assert len(hosts) == 2
 
-    @patch.object(IBStatusScraper, "_ping")
-    def test_one_reachable(self, mock_ping, scraper):
-        mock_ping.side_effect = [False, True]
+    @patch.object(IBStatusScraper, "_check_host")
+    def test_one_reachable(self, mock_check, scraper):
+        mock_check.side_effect = [False, True]
         ok, hosts = scraper.check_backends()
         assert ok is True
         assert hosts == ["cdc1-hb2.ibllc.com"]
 
-    @patch.object(IBStatusScraper, "_ping")
-    def test_none_reachable(self, mock_ping, scraper):
-        mock_ping.return_value = False
+    @patch.object(IBStatusScraper, "_check_host")
+    def test_none_reachable(self, mock_check, scraper):
+        mock_check.return_value = False
         ok, hosts = scraper.check_backends()
         assert ok is False
         assert hosts == []
@@ -86,26 +89,26 @@ class TestCheckBackends:
 class TestCheckInternet:
     """Test internet connectivity — backends first, then CDN fallback."""
 
-    @patch.object(IBStatusScraper, "_ping")
-    def test_backends_reachable(self, mock_ping, scraper):
+    @patch.object(IBStatusScraper, "_check_host")
+    def test_backends_reachable(self, mock_check, scraper):
         # Backends respond — no need to check CDN
-        mock_ping.return_value = True
+        mock_check.return_value = True
         assert scraper.check_internet() is True
 
-    @patch.object(IBStatusScraper, "_ping")
-    def test_backends_down_cdn_up(self, mock_ping, scraper):
+    @patch.object(IBStatusScraper, "_check_host")
+    def test_backends_down_cdn_up(self, mock_check, scraper):
         # Backends fail, CDN responds — internet is up
         call_count = [0]
-        def side_effect(host, timeout=3):
+        def side_effect(host, port=443, timeout=3):
             call_count[0] += 1
             # First 2 calls are backends, 3rd is CDN fallback
             return call_count[0] > 2
-        mock_ping.side_effect = side_effect
+        mock_check.side_effect = side_effect
         assert scraper.check_internet() is True
 
-    @patch.object(IBStatusScraper, "_ping")
-    def test_everything_down(self, mock_ping, scraper):
-        mock_ping.return_value = False
+    @patch.object(IBStatusScraper, "_check_host")
+    def test_everything_down(self, mock_check, scraper):
+        mock_check.return_value = False
         assert scraper.check_internet() is False
 
 

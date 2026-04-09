@@ -15,6 +15,15 @@ on:
         required: false
         default: "latest"
         type: string
+      arch:
+        description: Target image architecture to publish
+        required: false
+        default: "amd64"
+        type: choice
+        options:
+          - amd64
+          - arm64
+          - multi
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -25,7 +34,7 @@ permissions:
 
 jobs:
   docker:
-    name: Build and push multi-arch Docker image
+    name: Build and push Docker image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,12 +79,40 @@ jobs:
           echo "version=$GATEWAY_VERSION" >> $GITHUB_OUTPUT
           echo "channel=$GATEWAY_CHANNEL" >> $GITHUB_OUTPUT
 
+      - name: Resolve target platforms
+        id: platforms
+        run: |
+          ARCH="${{ github.event.inputs.arch }}"
+
+          if [ -z "$ARCH" ]; then
+            ARCH="amd64"
+          fi
+
+          case "$ARCH" in
+            amd64)
+              PLATFORMS="linux/amd64"
+              ;;
+            arm64)
+              PLATFORMS="linux/arm64"
+              ;;
+            multi)
+              PLATFORMS="linux/amd64,linux/arm64"
+              ;;
+            *)
+              echo "Unsupported arch: $ARCH" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "arch=$ARCH" >> $GITHUB_OUTPUT
+          echo "platforms=$PLATFORMS" >> $GITHUB_OUTPUT
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.platforms.outputs.platforms }}
           build-args: |
             IB_GATEWAY_VERSION=${{ steps.gateway.outputs.version }}
             IB_GATEWAY_CHANNEL=${{ steps.gateway.outputs.channel }}
