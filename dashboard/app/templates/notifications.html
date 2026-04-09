@@ -4,12 +4,21 @@
 
 <div id="notifications-content">
     <div class="card" style="margin-bottom: 12px;">
-        <div class="card-label">ntfy.sh Configuration</div>
+        <div class="card-label">Delivery Channel</div>
         <div style="margin-top: 8px;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
                 <label style="color: #a1a1aa; font-size: 12px; min-width: 60px;">Enabled</label>
                 <input type="checkbox" id="notif-enabled">
             </div>
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                <label style="color: #a1a1aa; font-size: 12px; min-width: 60px;">Channel</label>
+                <select id="notif-channel" onchange="toggleChannelFields(); markDirty()" style="flex: 1; background: #0a1630; border: 1px solid #27272a; border-radius: 3px; color: #e2e8f0; padding: 4px 8px; font-size: 12px;">
+                    <option value="ntfy">ntfy.sh</option>
+                    <option value="slack">Slack</option>
+                    <option value="telegram">Telegram</option>
+                </select>
+            </div>
+            <div id="channel-ntfy">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
                 <label style="color: #a1a1aa; font-size: 12px; min-width: 60px;">URL</label>
                 <input type="text" id="notif-url" placeholder="https://ntfy.sh" style="flex: 1; background: #0a1630; border: 1px solid #27272a; border-radius: 3px; color: #e2e8f0; padding: 4px 8px; font-size: 12px; font-family: 'SF Mono', monospace;">
@@ -21,6 +30,23 @@
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
                 <label style="color: #a1a1aa; font-size: 12px; min-width: 60px;">Token</label>
                 <input type="password" id="notif-token" placeholder="Bearer token (optional)" style="flex: 1; background: #0a1630; border: 1px solid #27272a; border-radius: 3px; color: #e2e8f0; padding: 4px 8px; font-size: 12px; font-family: 'SF Mono', monospace;">
+            </div>
+            </div>
+            <div id="channel-slack" style="display: none;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                    <label style="color: #a1a1aa; font-size: 12px; min-width: 60px;">Webhook</label>
+                    <input type="password" id="slack-webhook-url" placeholder="https://hooks.slack.com/services/..." style="flex: 1; background: #0a1630; border: 1px solid #27272a; border-radius: 3px; color: #e2e8f0; padding: 4px 8px; font-size: 12px; font-family: 'SF Mono', monospace;">
+                </div>
+            </div>
+            <div id="channel-telegram" style="display: none;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                    <label style="color: #a1a1aa; font-size: 12px; min-width: 60px;">Bot Token</label>
+                    <input type="password" id="telegram-bot-token" placeholder="123456:ABC..." style="flex: 1; background: #0a1630; border: 1px solid #27272a; border-radius: 3px; color: #e2e8f0; padding: 4px 8px; font-size: 12px; font-family: 'SF Mono', monospace;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                    <label style="color: #a1a1aa; font-size: 12px; min-width: 60px;">Chat ID</label>
+                    <input type="text" id="telegram-chat-id" placeholder="123456789" style="flex: 1; background: #0a1630; border: 1px solid #27272a; border-radius: 3px; color: #e2e8f0; padding: 4px 8px; font-size: 12px; font-family: 'SF Mono', monospace;">
+                </div>
             </div>
             <div style="display: flex; gap: 6px;">
                 <button class="ctrl-btn" onclick="saveConfig()">Save</button>
@@ -52,6 +78,7 @@
 var currentConfig = {};
 
 var EVENT_LABELS = {
+    'login_failed': {label: 'Login Failed', desc: 'Alert when the initial login flow hits a terminal error and ibctl retries', hasTimeout: false},
     'no_clients': {label: 'No API Clients', desc: 'Alert when an instance is Connected but has 0 clients', hasTimeout: true},
     'session_lost': {label: 'Session Lost', desc: 'Alert when state leaves Connected unexpectedly', hasTimeout: false},
     'relogin_failed': {label: 'Re-login Failed', desc: 'Alert when re-login attempts exhausted', hasTimeout: false},
@@ -66,11 +93,23 @@ function loadConfig() {
         if (!d.ok) return;
         currentConfig = d.config;
         document.getElementById('notif-enabled').checked = d.config.enabled;
+        document.getElementById('notif-channel').value = d.config.channel || 'ntfy';
         document.getElementById('notif-url').value = d.config.ntfy.url || '';
         document.getElementById('notif-topic').value = d.config.ntfy.topic || '';
         document.getElementById('notif-token').value = d.config.ntfy.token || '';
+        document.getElementById('slack-webhook-url').value = (d.config.slack && d.config.slack.webhook_url) || '';
+        document.getElementById('telegram-bot-token').value = (d.config.telegram && d.config.telegram.bot_token) || '';
+        document.getElementById('telegram-chat-id').value = (d.config.telegram && d.config.telegram.chat_id) || '';
+        toggleChannelFields();
         renderEvents(d.config.events || {});
     });
+}
+
+function toggleChannelFields() {
+    var channel = document.getElementById('notif-channel').value || 'ntfy';
+    document.getElementById('channel-ntfy').style.display = channel === 'ntfy' ? 'block' : 'none';
+    document.getElementById('channel-slack').style.display = channel === 'slack' ? 'block' : 'none';
+    document.getElementById('channel-telegram').style.display = channel === 'telegram' ? 'block' : 'none';
 }
 
 function renderEvents(events) {
@@ -114,9 +153,13 @@ function gatherConfig() {
     }
     return {
         enabled: document.getElementById('notif-enabled').checked,
+        channel: document.getElementById('notif-channel').value,
         ntfy_url: document.getElementById('notif-url').value,
         ntfy_topic: document.getElementById('notif-topic').value,
         ntfy_token: document.getElementById('notif-token').value,
+        slack_webhook_url: document.getElementById('slack-webhook-url').value,
+        telegram_bot_token: document.getElementById('telegram-bot-token').value,
+        telegram_chat_id: document.getElementById('telegram-chat-id').value,
         events: events,
     };
 }

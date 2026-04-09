@@ -1,7 +1,7 @@
 services:
   ib-gateway:
     # Use pre-built image (recommended):
-    # image: ghcr.io/uranuswch/ibctl:latest
+    # image: ghcr.io/lcstyle/ibctl:latest
     # Or build from source:
     build:
       context: .

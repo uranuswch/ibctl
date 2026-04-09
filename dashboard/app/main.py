@@ -45,22 +45,26 @@ async def lifespan(app: FastAPI):
     await monitor.start()
 
     # Start Notification service + No-clients monitor
+    from app.services.login_failure_monitor import LoginFailureMonitor
     from app.services.notification_service import NotificationService
     from app.services.no_clients_monitor import NoClientsMonitor
     notification_service = NotificationService()
     app.state.notification_service = notification_service
     no_clients_monitor = NoClientsMonitor(app.state.instance_registry, notification_service)
+    login_failure_monitor = LoginFailureMonitor(app.state.instance_registry, notification_service)
     app.state.no_clients_monitor = no_clients_monitor
+    app.state.login_failure_monitor = login_failure_monitor
     await no_clients_monitor.start()
+    await login_failure_monitor.start()
     if notification_service.config.enabled:
-        logger.info("Notification service enabled (ntfy: %s/%s)",
-                     notification_service.config.ntfy_url, notification_service.config.ntfy_topic)
+        logger.info("Notification service enabled (channel: %s)", notification_service.config.channel)
     else:
         logger.info("Notification service disabled (set IBCTL_NOTIFICATIONS_ENABLED=true to enable)")
 
     yield
 
     # Stop services
+    await login_failure_monitor.stop()
     await no_clients_monitor.stop()
     await monitor.stop()
     logger.info("Dashboard shutting down")
