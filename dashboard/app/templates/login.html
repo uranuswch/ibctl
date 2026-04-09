@@ -72,12 +72,21 @@
             font-size: 13px;
             cursor: pointer;
         }
+        .login-btn-secondary {
+            border-color: #475569;
+            background: #0f172a;
+            color: #e2e8f0;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
     <form class="login-shell" method="post" action="{{ root_path }}/login">
         <h1 class="login-title">ibctl</h1>
-        <p class="login-subtitle">Enter the dashboard password. Bearer tokens continue to work for API clients.</p>
+        <p class="login-subtitle">Use the dashboard password or GitHub sign-in. Bearer tokens continue to work for API clients.</p>
         <input type="hidden" name="next" value="{{ next_path }}">
         <label class="login-label" for="password">Password</label>
         <input class="login-input" id="password" name="password" type="password" autocomplete="current-password" autofocus>
@@ -86,6 +95,9 @@
         {% endif %}
         <div class="login-actions">
             <button class="login-btn" type="submit">Sign In</button>
+            {% if github_oauth_enabled %}
+            <a class="login-btn login-btn-secondary" href="{{ root_path }}/auth/github?next={{ next_path | urlencode }}">Sign In with GitHub</a>
+            {% endif %}
         </div>
     </form>
 </body>
