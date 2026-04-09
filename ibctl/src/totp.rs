@@ -1,7 +1,9 @@
 //! TOTP (Time-based One-Time Password) generation for two-factor authentication.
 //!
-//! The primary implementation shells out to `oathtool`, piping the secret via
-//! stdin to avoid exposing it in /proc/PID/cmdline.
+//! The default [`BuiltinProvider`] generates codes in-process using RFC 6238
+//! (HMAC-SHA1, 30-second step, 6 digits) via `totp-lite`. [`OathtoolProvider`]
+//! shells out to `oathtool` and is available as an opt-in fallback via
+//! `TOTP_PROVIDER=oathtool`.
 
 use crate::config::TotpProvider;
 use crate::types::TotpCode;
