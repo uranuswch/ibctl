@@ -21,8 +21,8 @@ trading_mode = "live"
 username = ""
 
 [twofa]
-# TOTP provider: oathtool | builtin (env: TOTP_PROVIDER)
-provider = "oathtool"
+# TOTP provider: builtin (RFC 6238, no external deps) | oathtool (env: TOTP_PROVIDER)
+provider = "builtin"
 # Action on 2FA timeout: restart | exit (env: TWOFA_TIMEOUT_ACTION)
 timeout_action = "restart"
 # Seconds to wait for 2FA completion (env: TWOFA_EXIT_INTERVAL)
