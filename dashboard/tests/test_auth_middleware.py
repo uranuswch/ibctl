@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -42,7 +44,7 @@ async def open_client():
 # --- Token configured: endpoints require auth ---
 
 class TestTokenConfigured:
-    """When IBCTL_DASHBOARD_TOKEN is set, all API endpoints require Bearer auth."""
+    """When IBCTL_DASHBOARD_TOKEN is set, auth supports bearer, basic, or login cookie."""
 
     @pytest.mark.asyncio
     async def test_command_rejects_no_auth(self, authed_client):
@@ -84,7 +86,8 @@ class TestTokenConfigured:
     @pytest.mark.asyncio
     async def test_pages_reject_no_auth(self, authed_client):
         resp = await authed_client.get("/")
-        assert resp.status_code == 401
+        assert resp.status_code == 303
+        assert resp.headers["location"].startswith("http://test/login")
 
     @pytest.mark.asyncio
     async def test_pages_accept_correct_token(self, authed_client):
@@ -100,6 +103,42 @@ class TestTokenConfigured:
         resp = await authed_client.get("/static/nonexistent.css")
         # 404 is fine — should NOT be 401
         assert resp.status_code != 401
+
+    @pytest.mark.asyncio
+    async def test_login_page_is_public(self, authed_client):
+        resp = await authed_client.get("/login")
+        assert resp.status_code == 200
+        assert "Password" in resp.text
+
+    @pytest.mark.asyncio
+    async def test_login_form_sets_cookie(self, authed_client):
+        resp = await authed_client.post("/login", content="password=test-secret&next=%2Fstate")
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/state"
+        assert "ibctl_dashboard_auth=test-secret" in resp.headers.get("set-cookie", "")
+
+    @pytest.mark.asyncio
+    async def test_login_cookie_grants_access(self, authed_client):
+        resp = await authed_client.get("/", headers={"Cookie": "ibctl_dashboard_auth=test-secret"})
+        assert resp.status_code != 401
+        assert resp.status_code != 303
+
+    @pytest.mark.asyncio
+    async def test_basic_auth_accepts_password(self, authed_client):
+        creds = base64.b64encode(b"user:test-secret").decode("ascii")
+        resp = await authed_client.get(
+            "/api/v1/status",
+            headers={"Authorization": f"Basic {creds}"},
+        )
+        assert resp.status_code != 401
+
+    @pytest.mark.asyncio
+    async def test_logout_clears_cookie(self, authed_client):
+        authed_client.cookies.set("ibctl_dashboard_auth", "test-secret", domain="test", path="/")
+        resp = await authed_client.post("/logout")
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/login"
+        assert "ibctl_dashboard_auth=\"\"" in resp.headers.get("set-cookie", "")
 
 
 # --- No token configured: endpoints are open ---

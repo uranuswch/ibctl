@@ -142,6 +142,16 @@ Docker secrets are supported: any variable can use `_FILE` suffix to read from a
 
 The dashboard Notifications tab can now send alerts for initial login failures in addition to the existing operational events. `login_failed` fires when the login flow enters a terminal `Error(...)` transition and ibctl starts a retry.
 
+### Dashboard auth
+
+Set `IBCTL_DASHBOARD_TOKEN` to protect the dashboard. That same secret now works in three ways:
+
+- Browser login form at `/login` using a password field
+- `Authorization: Bearer <token>` for API clients and scripts
+- HTTP Basic auth using the token as the password
+
+The browser login stores an `HttpOnly` session cookie after successful sign-in.
+
 ## IBC-compatible command server
 
 ibctl exposes an IBC-compatible TCP command server (default port 7462):

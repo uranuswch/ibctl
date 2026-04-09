@@ -4,15 +4,79 @@ from __future__ import annotations
 
 import logging
 import os
+import hmac
+from urllib.parse import parse_qs
 from dataclasses import asdict
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.domain.errors import DashboardError
+from app.middleware.auth import AUTH_COOKIE_NAME
 
 logger = logging.getLogger("dashboard.pages")
 router = APIRouter()
+
+
+def _safe_next_path(next_path: str | None) -> str:
+    if not next_path:
+        return "/"
+    if not next_path.startswith("/"):
+        return "/"
+    if next_path.startswith("//"):
+        return "/"
+    if next_path.startswith("/login"):
+        return "/"
+    return next_path
+
+
+@router.get("/login", response_class=HTMLResponse, name="login_page")
+async def login_page(request: Request, next: str | None = None):
+    if not request.app.state.settings.token:
+        return RedirectResponse(url="/", status_code=303)
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(request, "login.html", {
+        "next_path": _safe_next_path(next),
+        "error": None,
+    })
+
+
+@router.post("/login", response_class=HTMLResponse)
+async def login_submit(request: Request):
+    token = request.app.state.settings.token
+    if not token:
+        return RedirectResponse(url="/", status_code=303)
+
+    body = (await request.body()).decode("utf-8")
+    form = parse_qs(body, keep_blank_values=True)
+    password = form.get("password", [""])[0]
+    next_path = _safe_next_path(form.get("next", ["/"])[0])
+
+    if not hmac.compare_digest(password, token):
+        templates = request.app.state.templates
+        return templates.TemplateResponse(request, "login.html", {
+            "next_path": next_path,
+            "error": "Invalid password",
+        }, status_code=401)
+
+    response = RedirectResponse(url=next_path, status_code=303)
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        path="/",
+    )
+    return response
+
+
+@router.post("/logout")
+async def logout(request: Request):
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(AUTH_COOKIE_NAME, path="/")
+    return response
 
 
 @router.get("/", response_class=HTMLResponse)

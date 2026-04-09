@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ibctl Login</title>
+    <link rel="stylesheet" href="{{ root_path }}/static/style.css?v=24">
+    <style>
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            background:
+                radial-gradient(circle at top, rgba(59,130,246,0.14), transparent 35%),
+                linear-gradient(180deg, #030712 0%, #0b1120 100%);
+        }
+        .login-shell {
+            width: min(420px, calc(100vw - 32px));
+            padding: 28px;
+            border: 1px solid #1f2937;
+            border-radius: 14px;
+            background: rgba(3, 7, 18, 0.92);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+        }
+        .login-title {
+            margin: 0 0 6px;
+            color: #f8fafc;
+            font-size: 28px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .login-subtitle {
+            margin: 0 0 18px;
+            color: #94a3b8;
+            font-size: 13px;
+        }
+        .login-label {
+            display: block;
+            margin-bottom: 6px;
+            color: #cbd5e1;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .login-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 11px 12px;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            background: #020617;
+            color: #f8fafc;
+            font-size: 14px;
+        }
+        .login-error {
+            margin: 10px 0 0;
+            color: #f87171;
+            font-size: 12px;
+        }
+        .login-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .login-btn {
+            border: 1px solid #2563eb;
+            border-radius: 8px;
+            background: #1d4ed8;
+            color: #eff6ff;
+            padding: 10px 14px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <form class="login-shell" method="post" action="{{ root_path }}/login">
+        <h1 class="login-title">ibctl</h1>
+        <p class="login-subtitle">Enter the dashboard password. Bearer tokens continue to work for API clients.</p>
+        <input type="hidden" name="next" value="{{ next_path }}">
+        <label class="login-label" for="password">Password</label>
+        <input class="login-input" id="password" name="password" type="password" autocomplete="current-password" autofocus>
+        {% if error %}
+        <p class="login-error">{{ error }}</p>
+        {% endif %}
+        <div class="login-actions">
+            <button class="login-btn" type="submit">Sign In</button>
+        </div>
+    </form>
+</body>
+</html>
