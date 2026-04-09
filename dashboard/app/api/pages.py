@@ -5,17 +5,30 @@ from __future__ import annotations
 import logging
 import os
 import hmac
+from urllib.parse import urlencode
 from urllib.parse import parse_qs
 from dataclasses import asdict
 
+import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.domain.errors import DashboardError
-from app.middleware.auth import AUTH_COOKIE_NAME
+from app.middleware.auth import (
+    AUTH_COOKIE_NAME,
+    OAUTH_COOKIE_NAME,
+    OAUTH_STATE_COOKIE_NAME,
+    build_oauth_session,
+    build_oauth_state,
+    parse_oauth_state,
+)
 
 logger = logging.getLogger("dashboard.pages")
 router = APIRouter()
+GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
+GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
+GITHUB_USER_URL = "https://api.github.com/user"
+GITHUB_ORGS_URL = "https://api.github.com/user/orgs"
 
 
 def _safe_next_path(next_path: str | None) -> str:
@@ -32,19 +45,22 @@ def _safe_next_path(next_path: str | None) -> str:
 
 @router.get("/login", response_class=HTMLResponse, name="login_page")
 async def login_page(request: Request, next: str | None = None):
-    if not request.app.state.settings.token:
+    settings = request.app.state.settings
+    if not settings.token and not settings.github_oauth_enabled:
         return RedirectResponse(url="/", status_code=303)
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, "login.html", {
         "next_path": _safe_next_path(next),
         "error": None,
+        "github_oauth_enabled": settings.github_oauth_enabled,
     })
 
 
 @router.post("/login", response_class=HTMLResponse)
 async def login_submit(request: Request):
-    token = request.app.state.settings.token
+    settings = request.app.state.settings
+    token = settings.token
     if not token:
         return RedirectResponse(url="/", status_code=303)
 
@@ -58,6 +74,7 @@ async def login_submit(request: Request):
         return templates.TemplateResponse(request, "login.html", {
             "next_path": next_path,
             "error": "Invalid password",
+            "github_oauth_enabled": settings.github_oauth_enabled,
         }, status_code=401)
 
     response = RedirectResponse(url=next_path, status_code=303)
@@ -72,10 +89,156 @@ async def login_submit(request: Request):
     return response
 
 
+async def _github_exchange_code(code: str, redirect_uri: str, settings) -> str:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            GITHUB_TOKEN_URL,
+            headers={"Accept": "application/json"},
+            data={
+                "client_id": settings.github_client_id,
+                "client_secret": settings.github_client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    access_token = payload.get("access_token", "")
+    if not access_token:
+        raise ValueError(payload.get("error_description") or "GitHub token exchange failed")
+    return access_token
+
+
+async def _github_fetch_user(access_token: str) -> dict:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            GITHUB_USER_URL,
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {access_token}",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _github_fetch_orgs(access_token: str) -> list[str]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            GITHUB_ORGS_URL,
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {access_token}",
+            },
+            params={"per_page": "100"},
+        )
+        resp.raise_for_status()
+        return [org.get("login", "") for org in resp.json() if org.get("login")]
+
+
+def _github_user_allowed(settings, login: str, orgs: list[str]) -> bool:
+    if settings.github_allowed_users and login not in settings.github_allowed_users:
+        return False
+    if settings.github_allowed_orgs and not set(orgs).intersection(settings.github_allowed_orgs):
+        return False
+    return True
+
+
+@router.get("/auth/github", name="github_oauth_start")
+async def github_oauth_start(request: Request, next: str | None = None):
+    settings = request.app.state.settings
+    if not settings.github_oauth_enabled:
+        return RedirectResponse(url="/login", status_code=303)
+
+    next_path = _safe_next_path(next)
+    state = build_oauth_state(next_path, settings.auth_secret)
+    redirect_uri = str(request.url_for("github_oauth_callback"))
+    scope = "read:user"
+    if settings.github_allowed_orgs:
+        scope = f"{scope} read:org"
+    params = urlencode({
+        "client_id": settings.github_client_id,
+        "redirect_uri": redirect_uri,
+        "scope": scope,
+        "state": state,
+    })
+    response = RedirectResponse(url=f"{GITHUB_AUTHORIZE_URL}?{params}", status_code=303)
+    response.set_cookie(
+        key=OAUTH_STATE_COOKIE_NAME,
+        value=state,
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        path="/",
+        max_age=600,
+    )
+    return response
+
+
+@router.get("/auth/github/callback", response_class=HTMLResponse, name="github_oauth_callback")
+async def github_oauth_callback(request: Request, code: str | None = None, state: str | None = None, error: str | None = None):
+    settings = request.app.state.settings
+    if not settings.github_oauth_enabled:
+        return RedirectResponse(url="/login", status_code=303)
+
+    cookie_state = request.cookies.get(OAUTH_STATE_COOKIE_NAME, "")
+    state_payload = parse_oauth_state(state or "", settings.auth_secret) if state and state == cookie_state else None
+    next_path = _safe_next_path(state_payload["next"]) if state_payload else "/"
+
+    if error:
+        templates = request.app.state.templates
+        return templates.TemplateResponse(request, "login.html", {
+            "next_path": next_path,
+            "error": f"GitHub login failed: {error}",
+            "github_oauth_enabled": True,
+        }, status_code=401)
+
+    if not state_payload or not code:
+        templates = request.app.state.templates
+        return templates.TemplateResponse(request, "login.html", {
+            "next_path": "/",
+            "error": "Invalid GitHub OAuth callback",
+            "github_oauth_enabled": True,
+        }, status_code=401)
+
+    try:
+        access_token = await _github_exchange_code(
+            code=code,
+            redirect_uri=str(request.url_for("github_oauth_callback")),
+            settings=settings,
+        )
+        user = await _github_fetch_user(access_token)
+        login = user.get("login", "")
+        orgs = await _github_fetch_orgs(access_token) if settings.github_allowed_orgs else []
+        if not login or not _github_user_allowed(settings, login, orgs):
+            raise ValueError("GitHub account is not authorized for this dashboard")
+    except (ValueError, httpx.HTTPError) as exc:
+        templates = request.app.state.templates
+        return templates.TemplateResponse(request, "login.html", {
+            "next_path": next_path,
+            "error": str(exc),
+            "github_oauth_enabled": True,
+        }, status_code=401)
+
+    response = RedirectResponse(url=next_path, status_code=303)
+    response.set_cookie(
+        key=OAUTH_COOKIE_NAME,
+        value=build_oauth_session(login, settings.auth_secret),
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        path="/",
+    )
+    response.delete_cookie(OAUTH_STATE_COOKIE_NAME, path="/")
+    return response
+
+
 @router.post("/logout")
 async def logout(request: Request):
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(AUTH_COOKIE_NAME, path="/")
+    response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
+    response.delete_cookie(OAUTH_STATE_COOKIE_NAME, path="/")
     return response
 
 

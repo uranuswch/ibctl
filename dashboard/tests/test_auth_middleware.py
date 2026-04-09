@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.config import DashboardSettings
 from app.main import create_app
+from app.middleware.auth import build_oauth_session
 
 
 def _make_app(token: str = "") -> create_app:
@@ -19,6 +20,7 @@ def _make_app(token: str = "") -> create_app:
         debug_mode=False,
         ibctl_host="127.0.0.1",
         ibctl_port=7462,
+        auth_secret=token or "test-auth-secret",
     )
     return create_app(settings=settings)
 
@@ -139,6 +141,13 @@ class TestTokenConfigured:
         assert resp.status_code == 303
         assert resp.headers["location"] == "/login"
         assert "ibctl_dashboard_auth=\"\"" in resp.headers.get("set-cookie", "")
+
+    @pytest.mark.asyncio
+    async def test_oauth_cookie_grants_access(self, authed_client):
+        cookie = build_oauth_session("octocat", "test-secret")
+        resp = await authed_client.get("/", headers={"Cookie": f"ibctl_dashboard_oauth={cookie}"})
+        assert resp.status_code != 401
+        assert resp.status_code != 303
 
 
 # --- No token configured: endpoints are open ---
