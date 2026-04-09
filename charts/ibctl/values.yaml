@@ -46,7 +46,7 @@ persistence:
   accessModes:
     - ReadWriteOnce
   size: 10Gi
-  mountPath: /home/ibgateway/Jts
+  mountPath: /home/ibgateway/Jts/settings
 
 service:
   type: ClusterIP
@@ -87,6 +87,7 @@ env:
   AUTO_RESTART_TIME: "09:05 PM"
   TWS_COLD_RESTART: ""
   JAVA_HEAP_SIZE: "768"
+  TWS_SETTINGS_PATH: /home/ibgateway/Jts/settings
   TZ: America/New_York
   RUST_LOG: ibctl=info
   IBCTL_DASHBOARD_ENABLED: "true"
@@ -133,4 +134,3 @@ probes:
       port: cmd-live
     initialDelaySeconds: 60
     periodSeconds: 15
-
