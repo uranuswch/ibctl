@@ -74,11 +74,8 @@ fn decode_secret(secret: &str) -> Result<Vec<u8>, TotpError> {
         .collect::<String>()
         .to_ascii_uppercase();
 
-    let key = base32::decode(
-        base32::Alphabet::Rfc4648 { padding: false },
-        &normalized,
-    )
-    .ok_or(TotpError::InvalidBase32)?;
+    let key = base32::decode(base32::Alphabet::Rfc4648 { padding: false }, &normalized)
+        .ok_or(TotpError::InvalidBase32)?;
 
     if key.is_empty() {
         return Err(TotpError::EmptySecret);
