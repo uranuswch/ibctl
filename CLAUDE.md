@@ -51,7 +51,7 @@ pinned via `rust-toolchain.toml`. Workspace-wide lints: `unsafe_code = "deny"`,
   `STOP`, `RESTART`, `RECONNECTDATA`, `RECONNECTACCOUNT`, `ENABLEAPI`, `STATUS`,
   `EXIT`. Protocol: `COMMAND\n` → `OK msg\n` / `ERROR msg\n` / `INFO msg\n`.
 - `cold_restart.rs` — Sunday weekly full re-auth (mirrors IBC's `ColdRestartTime`).
-- `totp.rs` — shells out to `oathtool`. Built-in TOTP is a v3 item.
+- `totp.rs` — TOTP generators. `BuiltinProvider` (default) is an in-process RFC 6238 implementation via `totp-lite`; `OathtoolProvider` is a legacy fallback, opt-in via `TOTP_PROVIDER=oathtool`.
 - `signals.rs` — SIGTERM/SIGINT graceful shutdown.
 
 Logging is JSON Lines via `env_logger` with a custom format (see `main.rs`). Log level

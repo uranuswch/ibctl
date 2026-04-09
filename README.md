@@ -145,7 +145,7 @@ Wire protocol is identical to IBC — line-based, `COMMAND\n` → `OK message\n`
 - [x] Login automation (IB API mode selection, trading mode, credentials, login button)
 - [x] 2FA device selection (IB Key, Mobile Authenticator)
 - [x] 2FA via IB Key mobile push (wait for approval, timeout with retry)
-- [x] 2FA via TOTP code (oathtool integration, configurable provider)
+- [x] 2FA via TOTP code (built-in RFC 6238 generator; oathtool also supported)
 - [x] Session conflict handling (primary/secondary/primaryoverride)
 - [x] Post-login API configuration via Global Configuration dialog
   - Master Client ID
@@ -165,7 +165,6 @@ Wire protocol is identical to IBC — line-based, `COMMAND\n` → `OK message\n`
 ## What's not yet implemented
 
 - [ ] AT-SPI accessibility tree fallback (v2)
-- [ ] Built-in TOTP generation (v3, currently shells out to oathtool)
 - [ ] OCR verification (v2)
 - [ ] API port override
 - [ ] Trusted API client IPs configuration
