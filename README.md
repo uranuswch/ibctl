@@ -221,6 +221,21 @@ Or use the multi-stage Docker build (no local toolchain needed):
 docker build -t ibctl .
 ```
 
+You can also pin the bundled IB Gateway version at build time:
+
+```bash
+docker build \
+  --build-arg IB_GATEWAY_VERSION=10.45.1b \
+  --build-arg IB_GATEWAY_CHANNEL=latest \
+  -t ibctl .
+```
+
+`docker-compose.yml` exposes the same build args through environment variables:
+
+```bash
+IB_GATEWAY_VERSION=10.45.1b IB_GATEWAY_CHANNEL=latest docker compose build
+```
+
 ## Kubernetes
 
 Kubernetes material is available in two forms:

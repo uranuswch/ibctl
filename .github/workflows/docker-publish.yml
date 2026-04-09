@@ -3,6 +3,18 @@ name: Docker Publish
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      gateway_version:
+        description: IB Gateway version to bake into the image
+        required: false
+        default: "10.45.1b"
+        type: string
+      gateway_channel:
+        description: IB Gateway release channel
+        required: false
+        default: "latest"
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -35,17 +47,38 @@ jobs:
         id: version
         run: |
           VERSION=${GITHUB_REF_NAME#v}
+          if [ "$VERSION" = "${GITHUB_REF_NAME}" ]; then
+            VERSION=$(git rev-parse --short HEAD)
+          fi
           MINOR=${VERSION%.*}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "minor=$MINOR" >> $GITHUB_OUTPUT
+
+      - name: Resolve Gateway build args
+        id: gateway
+        run: |
+          GATEWAY_VERSION="${{ github.event.inputs.gateway_version }}"
+          GATEWAY_CHANNEL="${{ github.event.inputs.gateway_channel }}"
+
+          if [ -z "$GATEWAY_VERSION" ]; then
+            GATEWAY_VERSION="10.45.1b"
+          fi
+          if [ -z "$GATEWAY_CHANNEL" ]; then
+            GATEWAY_CHANNEL="latest"
+          fi
+
+          echo "version=$GATEWAY_VERSION" >> $GITHUB_OUTPUT
+          echo "channel=$GATEWAY_CHANNEL" >> $GITHUB_OUTPUT
 
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          platforms: linux/amd64,linux/arm64
           build-args: |
+            IB_GATEWAY_VERSION=${{ steps.gateway.outputs.version }}
+            IB_GATEWAY_CHANNEL=${{ steps.gateway.outputs.channel }}
             IBCTL_BUILD_VERSION=${{ steps.version.outputs.version }}
           tags: |
             ghcr.io/uranuswch/ibctl:latest

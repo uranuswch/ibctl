@@ -7,6 +7,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        IB_GATEWAY_VERSION: ${IB_GATEWAY_VERSION:-10.45.1b}
+        IB_GATEWAY_CHANNEL: ${IB_GATEWAY_CHANNEL:-latest}
         IBCTL_BUILD_VERSION: ${IBCTL_BUILD_VERSION:-}
     container_name: ibctl-gateway
     restart: unless-stopped
