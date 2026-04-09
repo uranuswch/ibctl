@@ -221,6 +221,16 @@ Or use the multi-stage Docker build (no local toolchain needed):
 docker build -t ibctl .
 ```
 
+## Kubernetes
+
+Kubernetes material is available in two forms:
+
+- [charts/ibctl](charts/ibctl) is a real Helm chart
+- [k8s/kubernetes.example.yaml](k8s/kubernetes.example.yaml) is a plain manifest-based deployment example
+- [k8s/helm-values.example.yaml](k8s/helm-values.example.yaml) is a Helm values reference/example
+
+They mirror the current container env vars and exposed ports from `docker-compose.yml`.
+
 ## License
 
 MIT — same as [gnzsnz/ib-gateway-docker](https://github.com/gnzsnz/ib-gateway-docker).

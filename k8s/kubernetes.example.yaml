@@ -1,0 +1,183 @@
+# Example Kubernetes manifests for ibctl.
+#
+# This is a starting point, not a production-hardened deployment. In production,
+# move secrets to External Secrets / Sealed Secrets / your secret manager and
+# restrict exposed ports to only what your clients actually need.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ibctl-secret
+type: Opaque
+stringData:
+  TWS_USERID: your-ib-username
+  TWS_PASSWORD: your-ib-password
+  TWS_USERID_PAPER: ""
+  TWS_PASSWORD_PAPER: ""
+  TWOFACTOR_CODE: ""
+  VNC_SERVER_PASSWORD: ""
+  IBCTL_DASHBOARD_TOKEN: change-me
+  IBCTL_NTFY_TOKEN: ""
+  IBCTL_SLACK_WEBHOOK_URL: ""
+  IBCTL_TELEGRAM_BOT_TOKEN: ""
+  IBCTL_TELEGRAM_CHAT_ID: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ibctl
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ibctl
+  template:
+    metadata:
+      labels:
+        app: ibctl
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: ibctl
+          image: ghcr.io/uranuswch/ibctl:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: live-api
+              containerPort: 4003
+            - name: paper-api
+              containerPort: 4004
+            - name: cmd-live
+              containerPort: 7462
+            - name: cmd-paper
+              containerPort: 7463
+            - name: dashboard
+              containerPort: 8080
+            - name: novnc
+              containerPort: 6080
+          env:
+            - name: DISPLAY
+              value: ":1"
+            - name: TRADING_MODE
+              value: "live"
+            - name: TWOFA_DEVICE
+              value: "IB Key"
+            - name: TWOFA_TIMEOUT_ACTION
+              value: "restart"
+            - name: TWOFA_EXIT_INTERVAL
+              value: "120"
+            - name: RELOGIN_AFTER_TWOFA_TIMEOUT
+              value: "yes"
+            - name: TWS_ACCEPT_INCOMING
+              value: "accept"
+            - name: TWS_MASTER_CLIENT_ID
+              value: ""
+            - name: READ_ONLY_API
+              value: "no"
+            - name: BYPASS_WARNING
+              value: "yes"
+            - name: ALLOW_BLIND_TRADING
+              value: "no"
+            - name: AUTO_RESTART_TIME
+              value: "09:05 PM"
+            - name: TWS_COLD_RESTART
+              value: ""
+            - name: JAVA_HEAP_SIZE
+              value: "768"
+            - name: TZ
+              value: "America/New_York"
+            - name: RUST_LOG
+              value: "ibctl=info"
+            - name: IBCTL_DASHBOARD_ENABLED
+              value: "true"
+            - name: IBCTL_DASHBOARD_PORT
+              value: "8080"
+            - name: IBCTL_DEBUG_MODE
+              value: "false"
+            - name: IBCTL_COMMAND_HOST
+              value: "127.0.0.1"
+            - name: IBCTL_COMMAND_PORT
+              value: "7462"
+            - name: IBCTL_COMMAND_HOST_PAPER
+              value: "127.0.0.1"
+            - name: IBCTL_COMMAND_PORT_PAPER
+              value: "7463"
+            - name: IBCTL_NOTIFICATIONS_ENABLED
+              value: "false"
+            - name: IBCTL_NOTIFICATION_CHANNEL
+              value: "ntfy"
+            - name: IBCTL_NTFY_URL
+              value: "https://ntfy.sh"
+            - name: IBCTL_NTFY_TOPIC
+              value: "ibctl"
+            - name: IB_STATUS_CHECK_INTERVAL
+              value: "300"
+            - name: IB_STATUS_REGION
+              value: "NA"
+          envFrom:
+            - secretRef:
+                name: ibctl-secret
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: jts-data
+              mountPath: /home/ibgateway/Jts
+          readinessProbe:
+            tcpSocket:
+              port: cmd-live
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          livenessProbe:
+            tcpSocket:
+              port: cmd-live
+            initialDelaySeconds: 90
+            periodSeconds: 30
+      volumes:
+        - name: jts-data
+          persistentVolumeClaim:
+            claimName: ibctl-jts
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ibctl-jts
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ibctl
+spec:
+  type: ClusterIP
+  selector:
+    app: ibctl
+  ports:
+    - name: live-api
+      port: 4003
+      targetPort: live-api
+    - name: paper-api
+      port: 4004
+      targetPort: paper-api
+    - name: cmd-live
+      port: 7462
+      targetPort: cmd-live
+    - name: cmd-paper
+      port: 7463
+      targetPort: cmd-paper
+    - name: dashboard
+      port: 8080
+      targetPort: dashboard
+    - name: novnc
+      port: 6080
+      targetPort: novnc
+

@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ibctl.fullname" . }}
+  labels:
+    {{- include "ibctl.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "ibctl.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: live-api
+      port: {{ .Values.service.ports.liveApi }}
+      targetPort: live-api
+    - name: paper-api
+      port: {{ .Values.service.ports.paperApi }}
+      targetPort: paper-api
+    - name: cmd-live
+      port: {{ .Values.service.ports.commandLive }}
+      targetPort: cmd-live
+    - name: cmd-paper
+      port: {{ .Values.service.ports.commandPaper }}
+      targetPort: cmd-paper
+    - name: dashboard
+      port: {{ .Values.service.ports.dashboard }}
+      targetPort: dashboard
+    - name: novnc
+      port: {{ .Values.service.ports.novnc }}
+      targetPort: novnc
+
