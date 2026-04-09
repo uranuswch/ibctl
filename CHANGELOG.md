@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Built-in RFC 6238 TOTP provider backed by `totp-lite` — `ibctl` no longer
+  needs to shell out to `oathtool` to generate 2FA codes.
+
+### Changed
+- `TOTP_PROVIDER` now defaults to `builtin`. Existing configurations that
+  explicitly set `TOTP_PROVIDER=oathtool` continue to work unchanged; the
+  `oathtool` binary is still installed in the Docker image.
+
+### Fixed
+- `TotpProvider::Builtin` is now a working provider instead of returning
+  `BuiltinNotImplemented`.
+
 ## [0.2.2] - 2026-03-30
 
 ### Security

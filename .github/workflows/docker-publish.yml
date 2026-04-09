@@ -44,8 +44,8 @@ jobs:
           build-args: |
             IBCTL_BUILD_VERSION=${{ steps.version.outputs.version }}
           tags: |
-            ghcr.io/lcstyle/ibctl:latest
-            ghcr.io/lcstyle/ibctl:${{ steps.version.outputs.version }}
-            ghcr.io/lcstyle/ibctl:${{ steps.version.outputs.minor }}
+            ghcr.io/uranuswch/ibctl:latest
+            ghcr.io/uranuswch/ibctl:${{ steps.version.outputs.version }}
+            ghcr.io/uranuswch/ibctl:${{ steps.version.outputs.minor }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

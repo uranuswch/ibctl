@@ -9,7 +9,7 @@ trading_mode = "live"      # "live", "paper", or "both"
 # paper.username = ""      # set via TWS_USERID_PAPER env var
 
 [twofa]
-provider = "oathtool"      # "oathtool" (shells out) or "builtin" (not yet implemented)
+provider = "builtin"       # "builtin" (RFC 6238, default) or "oathtool" (requires oathtool package)
 secret_env = "TWOFACTOR_CODE"  # name of env var holding TOTP secret
 timeout_action = "restart" # "restart" (re-login) or "exit" (shutdown)
 timeout_seconds = 120      # max wait for 2FA approval before timeout_action

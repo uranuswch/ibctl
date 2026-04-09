@@ -407,7 +407,7 @@ impl Default for TwoFaConfig {
     fn default() -> Self {
         Self {
             secret_env: "TWOFACTOR_CODE".to_string(),
-            provider: TotpProvider::Oathtool,
+            provider: TotpProvider::Builtin,
             timeout_action: TwoFaTimeoutAction::Restart,
             timeout_seconds: 180,
             device: String::new(),
@@ -819,7 +819,7 @@ mod tests {
     fn test_default_config_values() {
         let config = Config::default();
         assert_eq!(config.auth.trading_mode, TradingMode::Live);
-        assert_eq!(config.twofa.provider, TotpProvider::Oathtool);
+        assert_eq!(config.twofa.provider, TotpProvider::Builtin);
         assert_eq!(config.twofa.timeout_action, TwoFaTimeoutAction::Restart);
         assert_eq!(config.gateway.program, GatewayProgram::Gateway);
         assert_eq!(config.session.action, SessionAction::Primary);
@@ -865,7 +865,7 @@ program = "tws"
         assert_eq!(config.auth.trading_mode, TradingMode::Paper);
         assert_eq!(config.gateway.program, GatewayProgram::Tws);
         // Defaults for unspecified fields
-        assert_eq!(config.twofa.provider, TotpProvider::Oathtool);
+        assert_eq!(config.twofa.provider, TotpProvider::Builtin);
     }
 
     #[test]
