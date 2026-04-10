@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Logs</h2>
-<div style="margin-bottom: 12px;">
+<div style="margin-bottom: 12px; color: #94a3b8; font-size: 12px;">
+    Log file: <code>{{ log_path }}</code>
+</div>
+<div style="margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
     <select id="log-level" onchange="updateLogFilter()">
         <option value="">All Levels</option>
         <option value="ERROR">ERROR</option>
@@ -9,6 +12,15 @@
         <option value="INFO">INFO</option>
         <option value="DEBUG">DEBUG</option>
     </select>
+    <input id="log-search"
+           type="search"
+           placeholder="Filter message text"
+           oninput="updateLogFilter()"
+           style="min-width: 240px; padding: 6px 8px; border: 1px solid #334155; border-radius: 6px; background: #020617; color: #f8fafc;">
+    <a href="{{ root_path }}/logs/download"
+       style="padding: 7px 10px; border: 1px solid #334155; border-radius: 6px; color: #e2e8f0; text-decoration: none; background: #0f172a;">
+        Download log
+    </a>
 </div>
 <div id="log-content"
      class="log-viewer"
@@ -20,8 +32,13 @@
 <script>
 function updateLogFilter() {
     const level = document.getElementById('log-level').value;
+    const search = document.getElementById('log-search').value.trim();
     const el = document.getElementById('log-content');
-    el.setAttribute('hx-get', ROOT_PATH + '/partials/logs' + (level ? '?level=' + level : ''));
+    const params = new URLSearchParams();
+    if (level) params.set('level', level);
+    if (search) params.set('search', search);
+    const query = params.toString();
+    el.setAttribute('hx-get', ROOT_PATH + '/partials/logs' + (query ? '?' + query : ''));
     htmx.trigger(el, 'load');
 }
 </script>

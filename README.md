@@ -123,6 +123,7 @@ For dual mode (live + paper simultaneously):
 | `VNC_SERVER_PASSWORD` | Enable VNC with this password | disabled |
 | `IBCTL_COMMAND_PORT` | TCP command server port | `7462` |
 | `IBCTL_LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |
+| `IBCTL_LOG_PATH` | Persistent log file path for dashboard logs | `<settings_path or tws_path>/ibctl.log` |
 
 ### Dashboard notifications
 
@@ -138,6 +139,17 @@ For dual mode (live + paper simultaneously):
 | `IBCTL_TELEGRAM_BOT_TOKEN` | Telegram bot token | — |
 | `IBCTL_TELEGRAM_CHAT_ID` | Telegram chat ID | — |
 
+### Dashboard auth / OAuth
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `IBCTL_DASHBOARD_TOKEN` | Shared secret for password login, Bearer auth, and Basic auth | — |
+| `IBCTL_DASHBOARD_AUTH_SECRET` | HMAC signing secret for browser auth cookies and OAuth state/session | `$IBCTL_DASHBOARD_TOKEN` or `$IBCTL_GITHUB_OAUTH_CLIENT_SECRET` |
+| `IBCTL_GITHUB_OAUTH_CLIENT_ID` | GitHub OAuth app client ID | — |
+| `IBCTL_GITHUB_OAUTH_CLIENT_SECRET` | GitHub OAuth app client secret | — |
+| `IBCTL_GITHUB_OAUTH_ALLOWED_USERS` | Comma-separated GitHub usernames allowed to log in | allow any GitHub user who completes OAuth |
+| `IBCTL_GITHUB_OAUTH_ALLOWED_ORGS` | Comma-separated GitHub orgs whose members may log in | allow any GitHub user who completes OAuth |
+
 Docker secrets are supported: any variable can use `_FILE` suffix to read from a file (e.g., `TWS_PASSWORD_FILE=/run/secrets/ib_password`).
 
 The dashboard Notifications tab can now send alerts for initial login failures in addition to the existing operational events. `login_failed` fires when the login flow enters a terminal `Error(...)` transition and ibctl starts a retry.
@@ -151,6 +163,67 @@ Set `IBCTL_DASHBOARD_TOKEN` to protect the dashboard. That same secret now works
 - HTTP Basic auth using the token as the password
 
 The browser login stores an `HttpOnly` session cookie after successful sign-in.
+
+GitHub OAuth is optional and can be enabled alongside the token login form. Set
+`IBCTL_GITHUB_OAUTH_CLIENT_ID` and `IBCTL_GITHUB_OAUTH_CLIENT_SECRET` to show a
+`Sign In with GitHub` button on `/login`.
+
+Access control rules for GitHub OAuth:
+
+- If neither `IBCTL_GITHUB_OAUTH_ALLOWED_USERS` nor `IBCTL_GITHUB_OAUTH_ALLOWED_ORGS` is set, any GitHub account that completes OAuth may log in.
+- If `IBCTL_GITHUB_OAUTH_ALLOWED_USERS` is set, only those usernames are allowed.
+- If `IBCTL_GITHUB_OAUTH_ALLOWED_ORGS` is set, members of any listed org are allowed.
+- If both are set, both checks apply.
+
+To allow every member of a GitHub org to log in:
+
+```yaml
+environment:
+  - IBCTL_GITHUB_OAUTH_CLIENT_ID=your-client-id
+  - IBCTL_GITHUB_OAUTH_CLIENT_SECRET=your-client-secret
+  - IBCTL_DASHBOARD_AUTH_SECRET=replace-with-a-long-random-secret
+  - IBCTL_GITHUB_OAUTH_ALLOWED_ORGS=my-company
+```
+
+For multiple orgs, use a comma-separated list:
+
+```yaml
+environment:
+  - IBCTL_GITHUB_OAUTH_ALLOWED_ORGS=my-company,partner-org,ops-team
+```
+
+When `IBCTL_GITHUB_OAUTH_ALLOWED_ORGS` is set, ibctl automatically requests
+GitHub's `read:org` scope during login so it can verify org membership.
+
+### Dashboard logs
+
+The dashboard has a `Logs` tab, but the backing `LOGS` command is not yet
+implemented in `ibctl`. At the moment the page is a placeholder and may appear
+empty even when the process is running normally.
+
+Current behavior:
+
+- `/logs` renders the dashboard log viewer UI
+- the dashboard polls `LOGS <limit>` over the ibctl command socket
+- ibctl currently returns `{"error":"not_implemented","message":"LOGS command is not yet implemented — use container logs instead"}`
+- the UI therefore shows an empty state rather than the live process log stream
+
+For real logs today, use the container/runtime logs directly:
+
+```bash
+# Docker Compose
+docker compose logs -f ibctl
+
+# Plain Docker
+docker logs -f <container-name>
+
+# Kubernetes
+kubectl logs -f deploy/ibctl
+kubectl logs -f pod/<pod-name>
+```
+
+If you run ibctl directly on the host, read stdout/stderr from the process
+manager you use (for example `systemd`, `supervisord`, or shell redirection).
 
 ## IBC-compatible command server
 

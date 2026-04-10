@@ -32,9 +32,9 @@ impl StateMachine {
                 let _ = tx.send(json);
             }
             Query::Logs(limit, tx) => {
+                let logs = crate::log_buffer::recent(limit);
                 let json = serde_json::json!({
-                    "error": "not_implemented",
-                    "message": "LOGS command is not yet implemented — use container logs instead",
+                    "logs": logs,
                     "limit": limit,
                 }).to_string();
                 let _ = tx.send(json);

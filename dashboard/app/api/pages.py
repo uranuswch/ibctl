@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 import os
 import hmac
+from pathlib import Path
 from urllib.parse import urlencode
 from urllib.parse import parse_qs
 from dataclasses import asdict
 
 import httpx
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 
 from app.domain.errors import DashboardError
 from app.middleware.auth import (
@@ -41,6 +42,17 @@ def _safe_next_path(next_path: str | None) -> str:
     if next_path.startswith("/login"):
         return "/"
     return next_path
+
+
+def _dashboard_log_path() -> Path:
+    explicit = os.environ.get("IBCTL_LOG_PATH", "").strip()
+    if explicit:
+        return Path(explicit)
+    settings_path = os.environ.get("TWS_SETTINGS_PATH", "").strip()
+    if settings_path:
+        return Path(settings_path) / "ibctl.log"
+    tws_path = os.environ.get("TWS_PATH", "/home/ibgateway/Jts").strip()
+    return Path(tws_path) / "ibctl.log"
 
 
 @router.get("/login", response_class=HTMLResponse, name="login_page")
@@ -271,7 +283,10 @@ async def config_page(request: Request):
 @router.get("/logs", response_class=HTMLResponse)
 async def logs_page(request: Request):
     templates = request.app.state.templates
-    return templates.TemplateResponse(request, "logs.html", {"active_tab": "logs"})
+    return templates.TemplateResponse(request, "logs.html", {
+        "active_tab": "logs",
+        "log_path": str(_dashboard_log_path()),
+    })
 
 
 @router.get("/controls", response_class=HTMLResponse)
@@ -297,11 +312,10 @@ async def notifications_page(request: Request):
 async def vnc_page(request: Request):
     templates = request.app.state.templates
     novnc_port = int(os.environ.get("IBCTL_NOVNC_PORT", "6080"))
-    vnc_password = os.environ.get("VNC_SERVER_PASSWORD", "")
     return templates.TemplateResponse(request, "vnc.html", {
         "active_tab": "vnc",
         "novnc_port": novnc_port,
-        "vnc_password": vnc_password,
+        "vnc_password_configured": bool(os.environ.get("VNC_SERVER_PASSWORD", "")),
     })
 
 
@@ -447,7 +461,7 @@ async def config_partial(request: Request):
 
 
 @router.get("/partials/logs", response_class=HTMLResponse)
-async def logs_partial(request: Request, level: str | None = None):
+async def logs_partial(request: Request, level: str | None = None, search: str | None = None):
     client = request.app.state.ibctl_client
     templates = request.app.state.templates
 
@@ -455,6 +469,9 @@ async def logs_partial(request: Request, level: str | None = None):
         entries = await client.logs(limit=50)
         if level:
             entries = [e for e in entries if e.level.upper() == level.upper()]
+        if search:
+            needle = search.lower()
+            entries = [e for e in entries if needle in e.message.lower()]
         logs = [asdict(e) for e in entries]
     except DashboardError:
         logs = []
@@ -462,6 +479,18 @@ async def logs_partial(request: Request, level: str | None = None):
     return templates.TemplateResponse(request, "partials/logs_content.html", {
         "logs": logs,
     })
+
+
+@router.get("/logs/download")
+async def logs_download():
+    log_path = _dashboard_log_path()
+    if not log_path.exists():
+        return RedirectResponse(url="/logs", status_code=303)
+    return FileResponse(
+        path=log_path,
+        filename=log_path.name,
+        media_type="text/plain",
+    )
 
 
 @router.get("/partials/ib-status", response_class=HTMLResponse)

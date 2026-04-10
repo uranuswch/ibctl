@@ -338,6 +338,7 @@ pub struct AgentConfig {
 #[serde(default)]
 pub struct LoggingConfig {
     pub level: LogLevel,
+    pub path: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -662,6 +663,9 @@ impl Config {
                 "error" => self.logging.level = LogLevel::Error,
                 other => log::warn!("Unknown IBCTL_LOG_LEVEL '{}', keeping default", other),
             }
+        }
+        if let Ok(v) = std::env::var("IBCTL_LOG_PATH") {
+            self.logging.path = v;
         }
 
         // Site

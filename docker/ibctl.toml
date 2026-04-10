@@ -61,6 +61,7 @@ ttl_seconds = 600          # fail-open TTL: if no status push within this period
 
 [logging]
 level = "info"             # "debug", "info", "warn", or "error"
+path = ""                  # empty = <settings_path or tws_path>/ibctl.log
 
 [timing]
 ui_tick_ms = 100           # delay between UI actions in config dialog
