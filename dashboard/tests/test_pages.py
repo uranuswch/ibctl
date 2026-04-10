@@ -108,6 +108,26 @@ async def test_github_oauth_start_sets_state_cookie_and_redirects():
 
 
 @pytest.mark.asyncio
+async def test_github_oauth_start_uses_explicit_redirect_uri():
+    app = create_app(settings=DashboardSettings(
+        port=8080,
+        token="test-secret",
+        debug_mode=False,
+        ibctl_host="127.0.0.1",
+        ibctl_port=7462,
+        auth_secret="test-secret",
+        github_client_id="github-client-id",
+        github_client_secret="github-client-secret",
+        github_redirect_uri="https://ibctl.example.com/auth/github/callback",
+    ))
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/auth/github?next=%2Fstate", follow_redirects=False)
+        assert response.status_code == 303
+        assert "redirect_uri=https%3A%2F%2Fibctl.example.com%2Fauth%2Fgithub%2Fcallback" in response.headers["location"]
+
+
+@pytest.mark.asyncio
 async def test_github_oauth_callback_sets_session_cookie(monkeypatch):
     app = create_app(settings=DashboardSettings(
         port=8080,
@@ -141,3 +161,78 @@ async def test_github_oauth_callback_sets_session_cookie(monkeypatch):
         assert response.status_code == 303
         assert response.headers["location"] == "/state"
         assert OAUTH_COOKIE_NAME in response.headers.get("set-cookie", "")
+
+
+@pytest.mark.asyncio
+async def test_github_oauth_callback_uses_explicit_redirect_uri(monkeypatch):
+    app = create_app(settings=DashboardSettings(
+        port=8080,
+        token="test-secret",
+        debug_mode=False,
+        ibctl_host="127.0.0.1",
+        ibctl_port=7462,
+        auth_secret="test-secret",
+        github_client_id="github-client-id",
+        github_client_secret="github-client-secret",
+        github_redirect_uri="https://ibctl.example.com/auth/github/callback",
+    ))
+
+    seen = {}
+
+    async def fake_exchange_code(code: str, redirect_uri: str, settings):
+        seen["redirect_uri"] = redirect_uri
+        return "access-token"
+
+    async def fake_fetch_user(access_token: str):
+        return {"login": "octocat"}
+
+    monkeypatch.setattr("app.api.pages._github_exchange_code", fake_exchange_code)
+    monkeypatch.setattr("app.api.pages._github_fetch_user", fake_fetch_user)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        state = build_oauth_state("/state", "test-secret")
+        client.cookies.set(OAUTH_STATE_COOKIE_NAME, state, path="/")
+        response = await client.get(
+            "/auth/github/callback",
+            params={"code": "oauth-code", "state": state},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert seen["redirect_uri"] == "https://ibctl.example.com/auth/github/callback"
+
+
+@pytest.mark.asyncio
+async def test_github_oauth_callback_rejects_unauthorized_user(monkeypatch):
+    app = create_app(settings=DashboardSettings(
+        port=8080,
+        token="test-secret",
+        debug_mode=False,
+        ibctl_host="127.0.0.1",
+        ibctl_port=7462,
+        auth_secret="test-secret",
+        github_client_id="github-client-id",
+        github_client_secret="github-client-secret",
+        github_allowed_users=("expected-user",),
+    ))
+
+    async def fake_exchange_code(code: str, redirect_uri: str, settings):
+        return "access-token"
+
+    async def fake_fetch_user(access_token: str):
+        return {"login": "actual-user"}
+
+    monkeypatch.setattr("app.api.pages._github_exchange_code", fake_exchange_code)
+    monkeypatch.setattr("app.api.pages._github_fetch_user", fake_fetch_user)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        state = build_oauth_state("/state", "test-secret")
+        client.cookies.set(OAUTH_STATE_COOKIE_NAME, state, path="/")
+        response = await client.get(
+            "/auth/github/callback",
+            params={"code": "oauth-code", "state": state},
+            follow_redirects=False,
+        )
+        assert response.status_code == 401
+        assert "not authorized" in response.text

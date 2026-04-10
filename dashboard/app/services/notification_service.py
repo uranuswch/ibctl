@@ -56,7 +56,7 @@ class NotificationConfig:
         "no_clients": {"enabled": True, "timeout_minutes": 30},
         "session_lost": {"enabled": True},
         "relogin_failed": {"enabled": True},
-        "warm_restart": {"enabled": False},
+        "warm_restart": {"enabled": True},
         "ib_maintenance": {"enabled": False},
     })
 
