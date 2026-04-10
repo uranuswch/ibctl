@@ -63,3 +63,5 @@ socket_path = "/tmp/ibctl.sock"
 [logging]
 # Log level: debug | info | warn | error (env: IBCTL_LOG_LEVEL)
 level = "info"
+# Log file path (env: IBCTL_LOG_PATH). Empty = <settings_path or tws_path>/ibctl.log
+path = ""

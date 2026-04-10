@@ -31,6 +31,7 @@ async def test_config_page_returns_200(client):
 async def test_logs_page_returns_200(client):
     response = await client.get("/logs")
     assert response.status_code == 200
+    assert "Log file:" in response.text
 
 
 @pytest.mark.asyncio
@@ -44,6 +45,27 @@ async def test_overview_partial_returns_html(client):
     response = await client.get("/partials/overview")
     assert response.status_code == 200
     assert "Gateway" in response.text or "Connected" in response.text or "status" in response.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_logs_partial_supports_search(client, fake_client):
+    from app.domain.models import LogEntry
+
+    fake_client._logs = [
+        LogEntry(timestamp="2026-04-10T00:00:00Z", level="INFO", message="gateway ready"),
+        LogEntry(timestamp="2026-04-10T00:00:01Z", level="ERROR", message="2fa failed"),
+    ]
+    response = await client.get("/partials/logs?search=2fa")
+    assert response.status_code == 200
+    assert "2fa failed" in response.text
+    assert "gateway ready" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_logs_download_redirects_when_file_missing(client):
+    response = await client.get("/logs/download", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/logs"
 
 
 @pytest.mark.asyncio

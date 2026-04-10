@@ -9,6 +9,7 @@ mod cold_restart;
 mod command_server;
 mod config;
 mod handlers;
+mod log_buffer;
 mod signals;
 mod state_machine;
 mod supervisor;
@@ -16,6 +17,7 @@ mod totp;
 pub mod types;
 
 use std::process::ExitCode;
+use std::path::PathBuf;
 
 use tokio::task::JoinSet;
 
@@ -42,17 +44,40 @@ fn main() -> ExitCode {
     }
     std::env::set_var("IBCTL_AGENT_TICK_MS", config.timing.agent_tick_ms.to_string());
 
+    let log_path = if config.logging.path.is_empty() {
+        let base = if config.gateway.settings_path.is_empty() {
+            PathBuf::from(&config.gateway.tws_path)
+        } else {
+            PathBuf::from(&config.gateway.settings_path)
+        };
+        base.join("ibctl.log")
+    } else {
+        PathBuf::from(&config.logging.path)
+    };
+
+    if let Err(e) = log_buffer::init_persistent_file(&log_path) {
+        eprintln!("Failed to initialize persistent log file at {}: {}", log_path.display(), e);
+    }
+
     // Initialize logging — JSON Lines format for structured log aggregation
     env_logger::Builder::from_default_env()
         .format(|buf, record| {
             use std::io::Write;
+            let timestamp = buf.timestamp_millis().to_string();
+            let level = record.level().to_string();
+            let message = format!("{}", record.args());
+            crate::log_buffer::push(crate::log_buffer::LogEntry {
+                timestamp: timestamp.clone(),
+                level: level.clone(),
+                message: message.clone(),
+            });
             writeln!(
                 buf,
                 r#"{{"ts":"{}","level":"{}","target":"{}","msg":{}}}"#,
-                buf.timestamp_millis(),
-                record.level(),
+                timestamp,
+                level,
                 record.target(),
-                serde_json::to_string(&format!("{}", record.args())).unwrap_or_default(),
+                serde_json::to_string(&message).unwrap_or_default(),
             )
         })
         .init();
@@ -204,4 +229,3 @@ fn print_usage() {
          for the full list of configuration options."
     );
 }
-
