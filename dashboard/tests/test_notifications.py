@@ -70,6 +70,11 @@ def test_notification_service_uses_channel_specific_client():
     assert service._client.__class__.__name__ == "SlackWebhookClient"
 
 
+def test_notification_config_enables_warm_restart_by_default():
+    config = NotificationConfig()
+    assert config.events["warm_restart"]["enabled"] is True
+
+
 async def test_login_failure_monitor_alerts_only_on_new_login_failure():
     initial_state = StateMachineState(
         current="Restarting",

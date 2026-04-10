@@ -55,6 +55,13 @@ def _dashboard_log_path() -> Path:
     return Path(tws_path) / "ibctl.log"
 
 
+def _github_redirect_uri(request: Request) -> str:
+    settings = request.app.state.settings
+    if settings.github_redirect_uri:
+        return settings.github_redirect_uri
+    return str(request.url_for("github_oauth_callback"))
+
+
 @router.get("/login", response_class=HTMLResponse, name="login_page")
 async def login_page(request: Request, next: str | None = None):
     settings = request.app.state.settings
@@ -164,7 +171,7 @@ async def github_oauth_start(request: Request, next: str | None = None):
 
     next_path = _safe_next_path(next)
     state = build_oauth_state(next_path, settings.auth_secret)
-    redirect_uri = str(request.url_for("github_oauth_callback"))
+    redirect_uri = _github_redirect_uri(request)
     scope = "read:user"
     if settings.github_allowed_orgs:
         scope = f"{scope} read:org"
@@ -216,13 +223,20 @@ async def github_oauth_callback(request: Request, code: str | None = None, state
     try:
         access_token = await _github_exchange_code(
             code=code,
-            redirect_uri=str(request.url_for("github_oauth_callback")),
+            redirect_uri=_github_redirect_uri(request),
             settings=settings,
         )
         user = await _github_fetch_user(access_token)
         login = user.get("login", "")
         orgs = await _github_fetch_orgs(access_token) if settings.github_allowed_orgs else []
         if not login or not _github_user_allowed(settings, login, orgs):
+            logger.warning(
+                "GitHub OAuth login rejected: login=%r orgs=%s allowed_users=%s allowed_orgs=%s",
+                login,
+                orgs,
+                list(settings.github_allowed_users),
+                list(settings.github_allowed_orgs),
+            )
             raise ValueError("GitHub account is not authorized for this dashboard")
     except (ValueError, httpx.HTTPError) as exc:
         templates = request.app.state.templates

@@ -31,6 +31,7 @@ class DashboardSettings:
         auth_secret: str = "",
         github_client_id: str = "",
         github_client_secret: str = "",
+        github_redirect_uri: str = "",
         github_allowed_users: tuple[str, ...] = (),
         github_allowed_orgs: tuple[str, ...] = (),
     ):
@@ -46,6 +47,7 @@ class DashboardSettings:
         self.auth_secret = auth_secret
         self.github_client_id = github_client_id
         self.github_client_secret = github_client_secret
+        self.github_redirect_uri = github_redirect_uri
         self.github_allowed_users = github_allowed_users
         self.github_allowed_orgs = github_allowed_orgs
 
@@ -90,6 +92,7 @@ class DashboardSettings:
             auth_secret=auth_secret,
             github_client_id=os.environ.get("IBCTL_GITHUB_OAUTH_CLIENT_ID", ""),
             github_client_secret=github_client_secret,
+            github_redirect_uri=os.environ.get("IBCTL_GITHUB_OAUTH_REDIRECT_URI", "").strip(),
             github_allowed_users=tuple(
                 value.strip()
                 for value in os.environ.get("IBCTL_GITHUB_OAUTH_ALLOWED_USERS", "").split(",")

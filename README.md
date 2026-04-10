@@ -147,6 +147,7 @@ For dual mode (live + paper simultaneously):
 | `IBCTL_DASHBOARD_AUTH_SECRET` | HMAC signing secret for browser auth cookies and OAuth state/session | `$IBCTL_DASHBOARD_TOKEN` or `$IBCTL_GITHUB_OAUTH_CLIENT_SECRET` |
 | `IBCTL_GITHUB_OAUTH_CLIENT_ID` | GitHub OAuth app client ID | — |
 | `IBCTL_GITHUB_OAUTH_CLIENT_SECRET` | GitHub OAuth app client secret | — |
+| `IBCTL_GITHUB_OAUTH_REDIRECT_URI` | Fixed GitHub OAuth callback URL to use instead of inferring from the request | inferred from the incoming request |
 | `IBCTL_GITHUB_OAUTH_ALLOWED_USERS` | Comma-separated GitHub usernames allowed to log in | allow any GitHub user who completes OAuth |
 | `IBCTL_GITHUB_OAUTH_ALLOWED_ORGS` | Comma-separated GitHub orgs whose members may log in | allow any GitHub user who completes OAuth |
 
@@ -167,6 +168,15 @@ The browser login stores an `HttpOnly` session cookie after successful sign-in.
 GitHub OAuth is optional and can be enabled alongside the token login form. Set
 `IBCTL_GITHUB_OAUTH_CLIENT_ID` and `IBCTL_GITHUB_OAUTH_CLIENT_SECRET` to show a
 `Sign In with GitHub` button on `/login`.
+
+If the dashboard runs behind Kubernetes ingress, a reverse proxy, or TLS
+termination that causes the app to infer the wrong callback URL, set
+`IBCTL_GITHUB_OAUTH_REDIRECT_URI` explicitly. Example:
+
+```yaml
+environment:
+  - IBCTL_GITHUB_OAUTH_REDIRECT_URI=https://ibctl.example.com/auth/github/callback
+```
 
 Access control rules for GitHub OAuth:
 
