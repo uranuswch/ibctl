@@ -68,7 +68,9 @@ pub(crate) fn parse_command(input: &str) -> Option<ParsedCommand> {
             // PAUSE with optional state name: "PAUSE WaitingForLogin"
             let orig_parts: Vec<&str> = trimmed.split_whitespace().collect();
             if let Some(state_name) = orig_parts.get(1) {
-                Some(ParsedCommand::Action(Command::PauseAt(state_name.to_string())))
+                Some(ParsedCommand::Action(Command::PauseAt(
+                    state_name.to_string(),
+                )))
             } else {
                 Some(ParsedCommand::Action(Command::Pause))
             }
@@ -87,8 +89,15 @@ pub(crate) fn parse_command(input: &str) -> Option<ParsedCommand> {
         // IB system status (pushed by dashboard)
         Some("IBSTATUS") => {
             let orig_parts: Vec<&str> = trimmed.splitn(3, ' ').collect();
-            let status = orig_parts.get(1).copied().unwrap_or("available").to_string();
-            let reason = orig_parts.get(2).map(|s| s.trim_matches('"').to_string()).unwrap_or_default();
+            let status = orig_parts
+                .get(1)
+                .copied()
+                .unwrap_or("available")
+                .to_string();
+            let reason = orig_parts
+                .get(2)
+                .map(|s| s.trim_matches('"').to_string())
+                .unwrap_or_default();
             Some(ParsedCommand::Action(Command::IbStatus(status, reason)))
         }
         // Set auto-restart time: SETRESTART 05:30 PM (UTC)
@@ -132,17 +141,19 @@ impl CommandServer {
         query_tx: mpsc::Sender<Query>,
     ) -> Result<(), CommandServerError> {
         let addr = format!("{}:{}", self.config.bind_address, self.config.port);
-        let listener = TcpListener::bind(&addr).await.map_err(|e| {
-            CommandServerError::BindFailed {
-                addr: addr.clone(),
-                source: e,
-            }
-        })?;
+        let listener =
+            TcpListener::bind(&addr)
+                .await
+                .map_err(|e| CommandServerError::BindFailed {
+                    addr: addr.clone(),
+                    source: e,
+                })?;
 
         log::info!("Command server listening on {}", addr);
 
         // Limit concurrent connections to prevent resource exhaustion
-        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_CONNECTIONS));
+        let semaphore =
+            std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_CONNECTIONS));
 
         loop {
             match listener.accept().await {
@@ -160,7 +171,8 @@ impl CommandServer {
                     let qry_tx = query_tx.clone();
                     tokio::spawn(async move {
                         if let Err(e) =
-                            handle_connection(stream, peer_addr, &control_from, cmd_tx, qry_tx).await
+                            handle_connection(stream, peer_addr, &control_from, cmd_tx, qry_tx)
+                                .await
                         {
                             log::error!("Error handling connection from {}: {}", peer_addr, e);
                         }
@@ -198,7 +210,9 @@ async fn handle_connection(
     match tokio::time::timeout(
         std::time::Duration::from_secs(30),
         buf_reader.read_line(&mut line),
-    ).await {
+    )
+    .await
+    {
         Ok(Ok(0)) => return Ok(()),
         Ok(Ok(_)) => {}
         Ok(Err(e)) => {
@@ -220,15 +234,20 @@ async fn handle_connection(
             if is_privileged_command(&cmd) && !is_localhost(&peer_addr.ip()) {
                 log::warn!(
                     "Rejected privileged command from non-localhost IP {}: {}",
-                    peer_addr, trimmed,
+                    peer_addr,
+                    trimmed,
                 );
-                writer.write_all(b"ERROR privileged command requires localhost\n").await?;
+                writer
+                    .write_all(b"ERROR privileged command requires localhost\n")
+                    .await?;
                 return Ok(());
             }
             let cmd_name = trimmed.to_uppercase();
             match command_tx.send(cmd).await {
                 Ok(_) => {
-                    writer.write_all(format!("OK {}\n", cmd_name).as_bytes()).await?;
+                    writer
+                        .write_all(format!("OK {}\n", cmd_name).as_bytes())
+                        .await?;
                 }
                 Err(_) => {
                     writer.write_all(b"ERROR command channel closed\n").await?;
@@ -250,15 +269,16 @@ async fn handle_connection(
             match query_tx.send(query).await {
                 Ok(_) => {
                     // Wait for response from the state machine (with timeout)
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(10),
-                        resp_rx,
-                    ).await {
+                    match tokio::time::timeout(std::time::Duration::from_secs(10), resp_rx).await {
                         Ok(Ok(json)) => {
-                            writer.write_all(format!("OK {}\n", json).as_bytes()).await?;
+                            writer
+                                .write_all(format!("OK {}\n", json).as_bytes())
+                                .await?;
                         }
                         Ok(Err(_)) => {
-                            writer.write_all(b"ERROR query response channel dropped\n").await?;
+                            writer
+                                .write_all(b"ERROR query response channel dropped\n")
+                                .await?;
                         }
                         Err(_) => {
                             writer.write_all(b"ERROR query timeout\n").await?;
@@ -271,7 +291,9 @@ async fn handle_connection(
             }
         }
         None => {
-            writer.write_all(format!("ERROR unknown command: {}\n", trimmed).as_bytes()).await?;
+            writer
+                .write_all(format!("ERROR unknown command: {}\n", trimmed).as_bytes())
+                .await?;
         }
     }
 
@@ -282,7 +304,10 @@ async fn handle_connection(
 /// Privileged commands (SETSTATE, PAUSE, EXIT) can manipulate the state machine
 /// in dangerous ways — they must not be accessible from the Docker network.
 fn is_privileged_command(cmd: &Command) -> bool {
-    matches!(cmd, Command::SetState(_) | Command::Pause | Command::PauseAt(_) | Command::Exit)
+    matches!(
+        cmd,
+        Command::SetState(_) | Command::Pause | Command::PauseAt(_) | Command::Exit
+    )
 }
 
 /// Returns true if the address is loopback (127.0.0.1 or ::1).
@@ -403,10 +428,10 @@ mod tests {
     #[test]
     fn test_multiple_allowed_ips() {
         let addr: IpAddr = "10.0.0.5".parse().unwrap();
-        assert!(is_allowed(&addr, &[
-            "192.168.1.1".to_string(),
-            "10.0.0.5".to_string(),
-        ]));
+        assert!(is_allowed(
+            &addr,
+            &["192.168.1.1".to_string(), "10.0.0.5".to_string(),]
+        ));
     }
 
     // CIDR tests — these FAIL with current implementation (the known bug)
@@ -443,10 +468,10 @@ mod tests {
     #[test]
     fn test_mixed_exact_and_cidr() {
         let addr: IpAddr = "172.18.0.3".parse().unwrap();
-        assert!(is_allowed(&addr, &[
-            "127.0.0.1".to_string(),
-            "172.0.0.0/8".to_string(),
-        ]));
+        assert!(is_allowed(
+            &addr,
+            &["127.0.0.1".to_string(), "172.0.0.0/8".to_string(),]
+        ));
     }
 
     // --- parse_command tests ---
@@ -515,9 +540,18 @@ mod tests {
 
     #[test]
     fn test_parse_all_query_types() {
-        assert!(matches!(parse_command("STATE"), Some(ParsedCommand::Query(QueryType::State))));
-        assert!(matches!(parse_command("CONFIG"), Some(ParsedCommand::Query(QueryType::Config))));
-        assert!(matches!(parse_command("WINDOWS"), Some(ParsedCommand::Query(QueryType::Windows))));
+        assert!(matches!(
+            parse_command("STATE"),
+            Some(ParsedCommand::Query(QueryType::State))
+        ));
+        assert!(matches!(
+            parse_command("CONFIG"),
+            Some(ParsedCommand::Query(QueryType::Config))
+        ));
+        assert!(matches!(
+            parse_command("WINDOWS"),
+            Some(ParsedCommand::Query(QueryType::Windows))
+        ));
     }
 
     #[test]
@@ -535,20 +569,43 @@ mod tests {
 
     #[test]
     fn test_parse_all_action_types() {
-        assert!(matches!(parse_command("STOP"), Some(ParsedCommand::Action(Command::Stop))));
-        assert!(matches!(parse_command("START"), Some(ParsedCommand::Action(Command::Start))));
-        assert!(matches!(parse_command("RESTART"), Some(ParsedCommand::Action(Command::Restart))));
-        assert!(matches!(parse_command("RECONNECTDATA"), Some(ParsedCommand::Action(Command::ReconnectData))));
-        assert!(matches!(parse_command("RECONNECTACCOUNT"), Some(ParsedCommand::Action(Command::ReconnectAccount))));
-        assert!(matches!(parse_command("ENABLEAPI"), Some(ParsedCommand::Action(Command::EnableApi))));
-        assert!(matches!(parse_command("EXIT"), Some(ParsedCommand::Action(Command::Exit))));
+        assert!(matches!(
+            parse_command("STOP"),
+            Some(ParsedCommand::Action(Command::Stop))
+        ));
+        assert!(matches!(
+            parse_command("START"),
+            Some(ParsedCommand::Action(Command::Start))
+        ));
+        assert!(matches!(
+            parse_command("RESTART"),
+            Some(ParsedCommand::Action(Command::Restart))
+        ));
+        assert!(matches!(
+            parse_command("RECONNECTDATA"),
+            Some(ParsedCommand::Action(Command::ReconnectData))
+        ));
+        assert!(matches!(
+            parse_command("RECONNECTACCOUNT"),
+            Some(ParsedCommand::Action(Command::ReconnectAccount))
+        ));
+        assert!(matches!(
+            parse_command("ENABLEAPI"),
+            Some(ParsedCommand::Action(Command::EnableApi))
+        ));
+        assert!(matches!(
+            parse_command("EXIT"),
+            Some(ParsedCommand::Action(Command::Exit))
+        ));
     }
 
     // --- privileged command tests ---
 
     #[test]
     fn test_setstate_is_privileged() {
-        assert!(is_privileged_command(&Command::SetState("Connected".into())));
+        assert!(is_privileged_command(&Command::SetState(
+            "Connected".into()
+        )));
     }
 
     #[test]
@@ -573,7 +630,10 @@ mod tests {
 
     #[test]
     fn test_ibstatus_is_not_privileged() {
-        assert!(!is_privileged_command(&Command::IbStatus("available".into(), "".into())));
+        assert!(!is_privileged_command(&Command::IbStatus(
+            "available".into(),
+            "".into()
+        )));
     }
 
     #[test]

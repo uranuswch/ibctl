@@ -109,7 +109,10 @@ impl Supervisor {
     }
 
     /// Launch with optional warm restart session path.
-    pub fn launch_with_restart(&mut self, autorestart_path: Option<&str>) -> Result<(), SupervisorError> {
+    pub fn launch_with_restart(
+        &mut self,
+        autorestart_path: Option<&str>,
+    ) -> Result<(), SupervisorError> {
         // Safety check: kill any orphaned Gateway JVMs for this config dir
         // before launching.
         self.kill_orphan_gateways();
@@ -136,7 +139,10 @@ impl Supervisor {
         // Read vmoptions if present — search same candidates as classpath
         let vmoptions_candidates = [
             tws_path.join(&version).join("ibgateway.vmoptions"),
-            tws_path.join("ibgateway").join(&version).join("ibgateway.vmoptions"),
+            tws_path
+                .join("ibgateway")
+                .join(&version)
+                .join("ibgateway.vmoptions"),
         ];
         let vm_opts = vmoptions_candidates
             .iter()
@@ -276,7 +282,10 @@ impl Supervisor {
                     }
                     Err(_elapsed) => {
                         // Timeout — process didn't exit within the grace period
-                        log::warn!("JVM didn't exit after SIGTERM within {}s — sending SIGKILL", self.shutdown_timeout_secs);
+                        log::warn!(
+                            "JVM didn't exit after SIGTERM within {}s — sending SIGKILL",
+                            self.shutdown_timeout_secs
+                        );
                         child.start_kill().ok();
                         Ok(())
                     }
@@ -333,7 +342,8 @@ impl Supervisor {
                     if cmdline.contains("ibgateway.GWClient") && cmdline.contains(&marker) {
                         log::warn!(
                             "Killing orphan Gateway JVM (PID {}) with config dir {}",
-                            pid, config_dir
+                            pid,
+                            config_dir
                         );
                         let _ = nix::sys::signal::kill(
                             nix::unistd::Pid::from_raw(pid),
@@ -368,11 +378,13 @@ impl Supervisor {
                         match std::fs::rename(&launcher, &renamed) {
                             Ok(()) => log::info!(
                                 "Disabled install4j launcher: {} -> {}",
-                                launcher.display(), renamed.display()
+                                launcher.display(),
+                                renamed.display()
                             ),
                             Err(e) => log::warn!(
                                 "Failed to rename install4j launcher {}: {}",
-                                launcher.display(), e
+                                launcher.display(),
+                                e
                             ),
                         }
                     }
@@ -387,11 +399,13 @@ impl Supervisor {
                                     match std::fs::rename(&launcher, &renamed) {
                                         Ok(()) => log::info!(
                                             "Disabled install4j launcher: {} -> {}",
-                                            launcher.display(), renamed.display()
+                                            launcher.display(),
+                                            renamed.display()
                                         ),
                                         Err(e) => log::warn!(
                                             "Failed to rename install4j launcher {}: {}",
-                                            launcher.display(), e
+                                            launcher.display(),
+                                            e
                                         ),
                                     }
                                 }
@@ -409,11 +423,13 @@ impl Supervisor {
                 match std::fs::rename(launcher, &renamed) {
                     Ok(()) => log::info!(
                         "Disabled install4j launcher: {} -> {}",
-                        launcher.display(), renamed.display()
+                        launcher.display(),
+                        renamed.display()
                     ),
                     Err(e) => log::warn!(
                         "Failed to rename install4j launcher {}: {}",
-                        launcher.display(), e
+                        launcher.display(),
+                        e
                     ),
                 }
             }
@@ -449,7 +465,6 @@ impl Supervisor {
         }
         None
     }
-
 
     /// Build the classpath by scanning the jars directory.
     ///
@@ -509,17 +524,18 @@ impl Supervisor {
     /// Skips comment lines (starting with `#`) and `-D` property lines,
     /// matching IBC's behavior of letting ibctl control system properties.
     pub fn read_vmoptions(path: &Path) -> Result<Vec<String>, SupervisorError> {
-        let contents = std::fs::read_to_string(path).map_err(|e| SupervisorError::VmOptionsFailed {
-            path: path.display().to_string(),
-            source: e,
-        })?;
+        let contents =
+            std::fs::read_to_string(path).map_err(|e| SupervisorError::VmOptionsFailed {
+                path: path.display().to_string(),
+                source: e,
+            })?;
 
         let opts: Vec<String> = contents
             .lines()
             .map(|line| line.trim())
             .filter(|line| !line.is_empty())
-            .filter(|line| !line.starts_with('#'))   // Skip comments
-            .filter(|line| !line.starts_with("-D"))   // Skip -D (we set our own)
+            .filter(|line| !line.starts_with('#')) // Skip comments
+            .filter(|line| !line.starts_with("-D")) // Skip -D (we set our own)
             .map(String::from)
             .collect();
 

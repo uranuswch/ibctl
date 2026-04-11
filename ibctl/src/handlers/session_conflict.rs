@@ -69,7 +69,10 @@ impl DialogHandler for SessionConflictHandler {
                 }
             }
 
-            log::warn!("No matching button found for session conflict action '{}'", self.action);
+            log::warn!(
+                "No matching button found for session conflict action '{}'",
+                self.action
+            );
             Ok(HandlerResult::Error("no matching button found".into()))
         })
     }

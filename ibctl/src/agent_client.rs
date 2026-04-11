@@ -74,17 +74,60 @@ pub struct WindowInfo {
 /// Abstract interface for the Java agent. Production uses UDS HTTP; tests use mocks.
 pub trait AgentApi: Send + Sync {
     fn health(&self) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
-    fn list_windows(&self) -> impl std::future::Future<Output = Result<Vec<WindowInfo>, AgentError>> + Send;
-    fn click_button(&self, window_id: WindowId, label: &str) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
-    fn type_text(&self, window_id: WindowId, field_index: usize, text: &str) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
-    fn click_menu(&self, window_id: WindowId, menu_path: &str) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
-    fn set_checkbox(&self, window_id: WindowId, label: &str, state: Option<bool>) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
-    fn select_list_item(&self, window_id: WindowId, item_text: &str) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
-    fn click_at(&self, window_id: WindowId, x: i32, y: i32) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
-    fn select_tree_node(&self, window_id: WindowId, node_name: &str) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
-    fn dump_components(&self, window_id: WindowId) -> impl std::future::Future<Output = Result<serde_json::Value, AgentError>> + Send;
-    fn list_tabs(&self, window_id: WindowId) -> impl std::future::Future<Output = Result<serde_json::Value, AgentError>> + Send;
-    fn send_key(&self, window_id: WindowId, key: &str) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
+    fn list_windows(
+        &self,
+    ) -> impl std::future::Future<Output = Result<Vec<WindowInfo>, AgentError>> + Send;
+    fn click_button(
+        &self,
+        window_id: WindowId,
+        label: &str,
+    ) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
+    fn type_text(
+        &self,
+        window_id: WindowId,
+        field_index: usize,
+        text: &str,
+    ) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
+    fn click_menu(
+        &self,
+        window_id: WindowId,
+        menu_path: &str,
+    ) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
+    fn set_checkbox(
+        &self,
+        window_id: WindowId,
+        label: &str,
+        state: Option<bool>,
+    ) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
+    fn select_list_item(
+        &self,
+        window_id: WindowId,
+        item_text: &str,
+    ) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
+    fn click_at(
+        &self,
+        window_id: WindowId,
+        x: i32,
+        y: i32,
+    ) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
+    fn select_tree_node(
+        &self,
+        window_id: WindowId,
+        node_name: &str,
+    ) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
+    fn dump_components(
+        &self,
+        window_id: WindowId,
+    ) -> impl std::future::Future<Output = Result<serde_json::Value, AgentError>> + Send;
+    fn list_tabs(
+        &self,
+        window_id: WindowId,
+    ) -> impl std::future::Future<Output = Result<serde_json::Value, AgentError>> + Send;
+    fn send_key(
+        &self,
+        window_id: WindowId,
+        key: &str,
+    ) -> impl std::future::Future<Output = Result<bool, AgentError>> + Send;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,25 +166,56 @@ impl AgentClient {
     pub async fn click_button(&self, window_id: WindowId, label: &str) -> Result<bool, AgentError> {
         self.inner.click_button_boxed(window_id, label).await
     }
-    pub async fn type_text(&self, window_id: WindowId, field_index: usize, text: &str) -> Result<bool, AgentError> {
-        self.inner.type_text_boxed(window_id, field_index, text).await
+    pub async fn type_text(
+        &self,
+        window_id: WindowId,
+        field_index: usize,
+        text: &str,
+    ) -> Result<bool, AgentError> {
+        self.inner
+            .type_text_boxed(window_id, field_index, text)
+            .await
     }
-    pub async fn click_menu(&self, window_id: WindowId, menu_path: &str) -> Result<bool, AgentError> {
+    pub async fn click_menu(
+        &self,
+        window_id: WindowId,
+        menu_path: &str,
+    ) -> Result<bool, AgentError> {
         self.inner.click_menu_boxed(window_id, menu_path).await
     }
-    pub async fn set_checkbox(&self, window_id: WindowId, label: &str, state: Option<bool>) -> Result<bool, AgentError> {
+    pub async fn set_checkbox(
+        &self,
+        window_id: WindowId,
+        label: &str,
+        state: Option<bool>,
+    ) -> Result<bool, AgentError> {
         self.inner.set_checkbox_boxed(window_id, label, state).await
     }
-    pub async fn select_list_item(&self, window_id: WindowId, item_text: &str) -> Result<bool, AgentError> {
-        self.inner.select_list_item_boxed(window_id, item_text).await
+    pub async fn select_list_item(
+        &self,
+        window_id: WindowId,
+        item_text: &str,
+    ) -> Result<bool, AgentError> {
+        self.inner
+            .select_list_item_boxed(window_id, item_text)
+            .await
     }
     pub async fn click_at(&self, window_id: WindowId, x: i32, y: i32) -> Result<bool, AgentError> {
         self.inner.click_at_boxed(window_id, x, y).await
     }
-    pub async fn select_tree_node(&self, window_id: WindowId, node_name: &str) -> Result<bool, AgentError> {
-        self.inner.select_tree_node_boxed(window_id, node_name).await
+    pub async fn select_tree_node(
+        &self,
+        window_id: WindowId,
+        node_name: &str,
+    ) -> Result<bool, AgentError> {
+        self.inner
+            .select_tree_node_boxed(window_id, node_name)
+            .await
     }
-    pub async fn dump_components(&self, window_id: WindowId) -> Result<serde_json::Value, AgentError> {
+    pub async fn dump_components(
+        &self,
+        window_id: WindowId,
+    ) -> Result<serde_json::Value, AgentError> {
         self.inner.dump_components_boxed(window_id).await
     }
     pub async fn list_tabs(&self, window_id: WindowId) -> Result<serde_json::Value, AgentError> {
@@ -161,16 +235,57 @@ type BoxFut<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Sen
 trait AgentApiBoxed: Send + Sync {
     fn health_boxed(&self) -> BoxFut<'_, Result<bool, AgentError>>;
     fn list_windows_boxed(&self) -> BoxFut<'_, Result<Vec<WindowInfo>, AgentError>>;
-    fn click_button_boxed<'a>(&'a self, window_id: WindowId, label: &'a str) -> BoxFut<'a, Result<bool, AgentError>>;
-    fn type_text_boxed<'a>(&'a self, window_id: WindowId, field_index: usize, text: &'a str) -> BoxFut<'a, Result<bool, AgentError>>;
-    fn click_menu_boxed<'a>(&'a self, window_id: WindowId, menu_path: &'a str) -> BoxFut<'a, Result<bool, AgentError>>;
-    fn set_checkbox_boxed<'a>(&'a self, window_id: WindowId, label: &'a str, state: Option<bool>) -> BoxFut<'a, Result<bool, AgentError>>;
-    fn select_list_item_boxed<'a>(&'a self, window_id: WindowId, item_text: &'a str) -> BoxFut<'a, Result<bool, AgentError>>;
-    fn click_at_boxed(&self, window_id: WindowId, x: i32, y: i32) -> BoxFut<'_, Result<bool, AgentError>>;
-    fn select_tree_node_boxed<'a>(&'a self, window_id: WindowId, node_name: &'a str) -> BoxFut<'a, Result<bool, AgentError>>;
-    fn dump_components_boxed(&self, window_id: WindowId) -> BoxFut<'_, Result<serde_json::Value, AgentError>>;
-    fn list_tabs_boxed(&self, window_id: WindowId) -> BoxFut<'_, Result<serde_json::Value, AgentError>>;
-    fn send_key_boxed<'a>(&'a self, window_id: WindowId, key: &'a str) -> BoxFut<'a, Result<bool, AgentError>>;
+    fn click_button_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        label: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>>;
+    fn type_text_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        field_index: usize,
+        text: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>>;
+    fn click_menu_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        menu_path: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>>;
+    fn set_checkbox_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        label: &'a str,
+        state: Option<bool>,
+    ) -> BoxFut<'a, Result<bool, AgentError>>;
+    fn select_list_item_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        item_text: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>>;
+    fn click_at_boxed(
+        &self,
+        window_id: WindowId,
+        x: i32,
+        y: i32,
+    ) -> BoxFut<'_, Result<bool, AgentError>>;
+    fn select_tree_node_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        node_name: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>>;
+    fn dump_components_boxed(
+        &self,
+        window_id: WindowId,
+    ) -> BoxFut<'_, Result<serde_json::Value, AgentError>>;
+    fn list_tabs_boxed(
+        &self,
+        window_id: WindowId,
+    ) -> BoxFut<'_, Result<serde_json::Value, AgentError>>;
+    fn send_key_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        key: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>>;
 }
 
 /// Blanket impl: any `T: AgentApi` can be used as a boxed trait object.
@@ -181,34 +296,75 @@ impl<T: AgentApi> AgentApiBoxed for T {
     fn list_windows_boxed(&self) -> BoxFut<'_, Result<Vec<WindowInfo>, AgentError>> {
         Box::pin(self.list_windows())
     }
-    fn click_button_boxed<'a>(&'a self, window_id: WindowId, label: &'a str) -> BoxFut<'a, Result<bool, AgentError>> {
+    fn click_button_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        label: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>> {
         Box::pin(self.click_button(window_id, label))
     }
-    fn type_text_boxed<'a>(&'a self, window_id: WindowId, field_index: usize, text: &'a str) -> BoxFut<'a, Result<bool, AgentError>> {
+    fn type_text_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        field_index: usize,
+        text: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>> {
         Box::pin(self.type_text(window_id, field_index, text))
     }
-    fn click_menu_boxed<'a>(&'a self, window_id: WindowId, menu_path: &'a str) -> BoxFut<'a, Result<bool, AgentError>> {
+    fn click_menu_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        menu_path: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>> {
         Box::pin(self.click_menu(window_id, menu_path))
     }
-    fn set_checkbox_boxed<'a>(&'a self, window_id: WindowId, label: &'a str, state: Option<bool>) -> BoxFut<'a, Result<bool, AgentError>> {
+    fn set_checkbox_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        label: &'a str,
+        state: Option<bool>,
+    ) -> BoxFut<'a, Result<bool, AgentError>> {
         Box::pin(self.set_checkbox(window_id, label, state))
     }
-    fn select_list_item_boxed<'a>(&'a self, window_id: WindowId, item_text: &'a str) -> BoxFut<'a, Result<bool, AgentError>> {
+    fn select_list_item_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        item_text: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>> {
         Box::pin(self.select_list_item(window_id, item_text))
     }
-    fn click_at_boxed(&self, window_id: WindowId, x: i32, y: i32) -> BoxFut<'_, Result<bool, AgentError>> {
+    fn click_at_boxed(
+        &self,
+        window_id: WindowId,
+        x: i32,
+        y: i32,
+    ) -> BoxFut<'_, Result<bool, AgentError>> {
         Box::pin(self.click_at(window_id, x, y))
     }
-    fn select_tree_node_boxed<'a>(&'a self, window_id: WindowId, node_name: &'a str) -> BoxFut<'a, Result<bool, AgentError>> {
+    fn select_tree_node_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        node_name: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>> {
         Box::pin(self.select_tree_node(window_id, node_name))
     }
-    fn dump_components_boxed(&self, window_id: WindowId) -> BoxFut<'_, Result<serde_json::Value, AgentError>> {
+    fn dump_components_boxed(
+        &self,
+        window_id: WindowId,
+    ) -> BoxFut<'_, Result<serde_json::Value, AgentError>> {
         Box::pin(self.dump_components(window_id))
     }
-    fn list_tabs_boxed(&self, window_id: WindowId) -> BoxFut<'_, Result<serde_json::Value, AgentError>> {
+    fn list_tabs_boxed(
+        &self,
+        window_id: WindowId,
+    ) -> BoxFut<'_, Result<serde_json::Value, AgentError>> {
         Box::pin(self.list_tabs(window_id))
     }
-    fn send_key_boxed<'a>(&'a self, window_id: WindowId, key: &'a str) -> BoxFut<'a, Result<bool, AgentError>> {
+    fn send_key_boxed<'a>(
+        &'a self,
+        window_id: WindowId,
+        key: &'a str,
+    ) -> BoxFut<'a, Result<bool, AgentError>> {
         Box::pin(self.send_key(window_id, key))
     }
 }
@@ -236,7 +392,12 @@ impl AgentApi for UdsAgent {
         let resp: AgentResponse<serde_json::Value> = self.post(&path, &body).await?;
         Ok(resp.ok)
     }
-    async fn type_text(&self, window_id: WindowId, field_index: usize, text: &str) -> Result<bool, AgentError> {
+    async fn type_text(
+        &self,
+        window_id: WindowId,
+        field_index: usize,
+        text: &str,
+    ) -> Result<bool, AgentError> {
         let path = format!("/windows/{}/type", window_id.0);
         let body = serde_json::json!({ "fieldIndex": field_index, "text": text });
         let resp: AgentResponse<serde_json::Value> = self.post(&path, &body).await?;
@@ -248,7 +409,12 @@ impl AgentApi for UdsAgent {
         let resp: AgentResponse<serde_json::Value> = self.post(&path, &body).await?;
         Ok(resp.ok)
     }
-    async fn set_checkbox(&self, window_id: WindowId, label: &str, state: Option<bool>) -> Result<bool, AgentError> {
+    async fn set_checkbox(
+        &self,
+        window_id: WindowId,
+        label: &str,
+        state: Option<bool>,
+    ) -> Result<bool, AgentError> {
         let path = format!("/windows/{}/checkbox", window_id.0);
         let body = if let Some(s) = state {
             serde_json::json!({ "label": label, "state": s.to_string() })
@@ -258,7 +424,11 @@ impl AgentApi for UdsAgent {
         let resp: AgentResponse<serde_json::Value> = self.post(&path, &body).await?;
         Ok(resp.ok)
     }
-    async fn select_list_item(&self, window_id: WindowId, item_text: &str) -> Result<bool, AgentError> {
+    async fn select_list_item(
+        &self,
+        window_id: WindowId,
+        item_text: &str,
+    ) -> Result<bool, AgentError> {
         let path = format!("/windows/{}/selectlist", window_id.0);
         let body = serde_json::json!({ "item": item_text });
         let resp: AgentResponse<serde_json::Value> = self.post(&path, &body).await?;
@@ -270,7 +440,11 @@ impl AgentApi for UdsAgent {
         let resp: AgentResponse<serde_json::Value> = self.post(&path, &body).await?;
         Ok(resp.ok)
     }
-    async fn select_tree_node(&self, window_id: WindowId, node_name: &str) -> Result<bool, AgentError> {
+    async fn select_tree_node(
+        &self,
+        window_id: WindowId,
+        node_name: &str,
+    ) -> Result<bool, AgentError> {
         let path = format!("/windows/{}/tree", window_id.0);
         let body = serde_json::json!({ "node": node_name });
         let resp: AgentResponse<serde_json::Value> = self.post(&path, &body).await?;
@@ -321,7 +495,11 @@ impl UdsAgent {
         );
         let resp_body = self.send_raw(&request).await?;
         serde_json::from_str(&resp_body).map_err(|e| {
-            log::debug!("Failed to parse response for POST {}: body={}", path, resp_body);
+            log::debug!(
+                "Failed to parse response for POST {}: body={}",
+                path,
+                resp_body
+            );
             AgentError::ParseError(e)
         })
     }
@@ -367,7 +545,8 @@ impl UdsAgent {
                 .ok_or_else(|| AgentError::Agent("response ok but no data".to_string()))
         } else {
             Err(AgentError::Agent(
-                resp.error.unwrap_or_else(|| "unknown agent error".to_string()),
+                resp.error
+                    .unwrap_or_else(|| "unknown agent error".to_string()),
             ))
         }
     }
@@ -382,6 +561,7 @@ pub struct MockAgent {
     pub windows: Vec<WindowInfo>,
     pub healthy: bool,
     pub click_result: bool,
+    pub components: serde_json::Value,
 }
 
 #[cfg(test)]
@@ -391,24 +571,54 @@ impl Default for MockAgent {
             windows: Vec::new(),
             healthy: true,
             click_result: true,
+            components: serde_json::json!({}),
         }
     }
 }
 
 #[cfg(test)]
 impl AgentApi for MockAgent {
-    async fn health(&self) -> Result<bool, AgentError> { Ok(self.healthy) }
-    async fn list_windows(&self) -> Result<Vec<WindowInfo>, AgentError> { Ok(self.windows.clone()) }
-    async fn click_button(&self, _: WindowId, _: &str) -> Result<bool, AgentError> { Ok(self.click_result) }
-    async fn type_text(&self, _: WindowId, _: usize, _: &str) -> Result<bool, AgentError> { Ok(true) }
-    async fn click_menu(&self, _: WindowId, _: &str) -> Result<bool, AgentError> { Ok(self.click_result) }
-    async fn set_checkbox(&self, _: WindowId, _: &str, _: Option<bool>) -> Result<bool, AgentError> { Ok(true) }
-    async fn select_list_item(&self, _: WindowId, _: &str) -> Result<bool, AgentError> { Ok(true) }
-    async fn click_at(&self, _: WindowId, _: i32, _: i32) -> Result<bool, AgentError> { Ok(true) }
-    async fn select_tree_node(&self, _: WindowId, _: &str) -> Result<bool, AgentError> { Ok(true) }
-    async fn dump_components(&self, _: WindowId) -> Result<serde_json::Value, AgentError> { Ok(serde_json::json!({})) }
-    async fn list_tabs(&self, _: WindowId) -> Result<serde_json::Value, AgentError> { Ok(serde_json::json!({"tabs": []})) }
-    async fn send_key(&self, _: WindowId, _: &str) -> Result<bool, AgentError> { Ok(true) }
+    async fn health(&self) -> Result<bool, AgentError> {
+        Ok(self.healthy)
+    }
+    async fn list_windows(&self) -> Result<Vec<WindowInfo>, AgentError> {
+        Ok(self.windows.clone())
+    }
+    async fn click_button(&self, _: WindowId, _: &str) -> Result<bool, AgentError> {
+        Ok(self.click_result)
+    }
+    async fn type_text(&self, _: WindowId, _: usize, _: &str) -> Result<bool, AgentError> {
+        Ok(true)
+    }
+    async fn click_menu(&self, _: WindowId, _: &str) -> Result<bool, AgentError> {
+        Ok(self.click_result)
+    }
+    async fn set_checkbox(
+        &self,
+        _: WindowId,
+        _: &str,
+        _: Option<bool>,
+    ) -> Result<bool, AgentError> {
+        Ok(true)
+    }
+    async fn select_list_item(&self, _: WindowId, _: &str) -> Result<bool, AgentError> {
+        Ok(true)
+    }
+    async fn click_at(&self, _: WindowId, _: i32, _: i32) -> Result<bool, AgentError> {
+        Ok(true)
+    }
+    async fn select_tree_node(&self, _: WindowId, _: &str) -> Result<bool, AgentError> {
+        Ok(true)
+    }
+    async fn dump_components(&self, _: WindowId) -> Result<serde_json::Value, AgentError> {
+        Ok(self.components.clone())
+    }
+    async fn list_tabs(&self, _: WindowId) -> Result<serde_json::Value, AgentError> {
+        Ok(serde_json::json!({"tabs": []}))
+    }
+    async fn send_key(&self, _: WindowId, _: &str) -> Result<bool, AgentError> {
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -423,7 +633,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_unhealthy() {
-        let client = AgentClient::mock(MockAgent { healthy: false, ..Default::default() });
+        let client = AgentClient::mock(MockAgent {
+            healthy: false,
+            ..Default::default()
+        });
         assert!(!client.health().await.unwrap());
     }
 
@@ -447,7 +660,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_click_button() {
-        let client = AgentClient::mock(MockAgent { click_result: false, ..Default::default() });
+        let client = AgentClient::mock(MockAgent {
+            click_result: false,
+            ..Default::default()
+        });
         assert!(!client.click_button(WindowId(1), "OK").await.unwrap());
     }
 }

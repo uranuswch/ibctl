@@ -26,7 +26,13 @@ pub enum SignalError {
 /// The returned receiver should be polled in the main select loop.
 /// The returned future should be spawned via a `JoinSet` for structured
 /// concurrency — the caller owns the task lifetime.
-pub fn setup_signal_handler() -> Result<(mpsc::Receiver<Signal>, impl std::future::Future<Output = ()>), SignalError> {
+pub fn setup_signal_handler() -> Result<
+    (
+        mpsc::Receiver<Signal>,
+        impl std::future::Future<Output = ()>,
+    ),
+    SignalError,
+> {
     let (tx, rx) = mpsc::channel(4);
 
     let mut signals = Signals::new([SIGTERM, SIGINT])?;
@@ -34,10 +40,9 @@ pub fn setup_signal_handler() -> Result<(mpsc::Receiver<Signal>, impl std::futur
         loop {
             // Poll the Signals stream using std::future::poll_fn,
             // which gives us access to the futures_core::Stream::poll_next.
-            let sig = std::future::poll_fn(|cx: &mut Context<'_>| {
-                Pin::new(&mut signals).poll_next(cx)
-            })
-            .await;
+            let sig =
+                std::future::poll_fn(|cx: &mut Context<'_>| Pin::new(&mut signals).poll_next(cx))
+                    .await;
 
             match sig {
                 Some(SIGTERM) => {
@@ -48,7 +53,7 @@ pub fn setup_signal_handler() -> Result<(mpsc::Receiver<Signal>, impl std::futur
                     log::info!("Received SIGINT");
                     let _ = tx.send(Signal::Interrupt).await;
                 }
-                Some(_) => {} // Ignore unexpected signals
+                Some(_) => {}  // Ignore unexpected signals
                 None => break, // Signal stream closed
             }
         }

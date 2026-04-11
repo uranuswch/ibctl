@@ -16,8 +16,8 @@ mod supervisor;
 mod totp;
 pub mod types;
 
-use std::process::ExitCode;
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use tokio::task::JoinSet;
 
@@ -42,7 +42,10 @@ fn main() -> ExitCode {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", format!("ibctl={}", config.logging.level));
     }
-    std::env::set_var("IBCTL_AGENT_TICK_MS", config.timing.agent_tick_ms.to_string());
+    std::env::set_var(
+        "IBCTL_AGENT_TICK_MS",
+        config.timing.agent_tick_ms.to_string(),
+    );
 
     let log_path = if config.logging.path.is_empty() {
         let base = if config.gateway.settings_path.is_empty() {
@@ -56,7 +59,11 @@ fn main() -> ExitCode {
     };
 
     if let Err(e) = log_buffer::init_persistent_file(&log_path) {
-        eprintln!("Failed to initialize persistent log file at {}: {}", log_path.display(), e);
+        eprintln!(
+            "Failed to initialize persistent log file at {}: {}",
+            log_path.display(),
+            e
+        );
     }
 
     // Initialize logging — JSON Lines format for structured log aggregation
@@ -155,10 +162,9 @@ async fn async_main(config: ValidConfig) -> Result<(), Box<dyn std::error::Error
     // the JVM, and the state machine relaunches with full re-auth.
     let (cold_restart_tx, cold_restart_rx) = tokio::sync::mpsc::channel(1);
     let cold_restart_time = config.session.cold_restart_time.clone();
-    if let Some(cold_restart_fut) = cold_restart::cold_restart_scheduler(
-        cold_restart_time,
-        cold_restart_tx,
-    ) {
+    if let Some(cold_restart_fut) =
+        cold_restart::cold_restart_scheduler(cold_restart_time, cold_restart_tx)
+    {
         tasks.spawn(cold_restart_fut);
     }
 

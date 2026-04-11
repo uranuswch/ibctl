@@ -19,7 +19,8 @@ use std::time::Instant;
 
 use tokio::sync::mpsc;
 
-use crate::types::{Command, Signal};
+use crate::agent_client::WindowInfo;
+use crate::types::{Command, Signal, WindowId};
 
 use types::Interrupt;
 
@@ -31,6 +32,20 @@ enum SelectOutcome {
 }
 
 impl StateMachine {
+    async fn window_has_text_fields(&self, window: &WindowInfo) -> bool {
+        self.agent_client
+            .dump_components(WindowId(window.id.0))
+            .await
+            .ok()
+            .and_then(|components| {
+                components
+                    .get("textfields")
+                    .and_then(|textfields| textfields.as_array())
+                    .map(|textfields| !textfields.is_empty())
+            })
+            .unwrap_or(false)
+    }
+
     /// Run the state machine until shutdown or fatal error.
     ///
     /// Uses `tokio::select!` with `biased;` to ensure signals (SIGTERM/SIGINT)
@@ -67,14 +82,8 @@ impl StateMachine {
                 &mut self.signal_rx,
                 mpsc::channel(1).1, // dummy receiver, never polled
             );
-            let mut cmd_rx = std::mem::replace(
-                &mut self.command_rx,
-                mpsc::channel(1).1,
-            );
-            let mut cold_rx = std::mem::replace(
-                &mut self.cold_restart_rx,
-                mpsc::channel(1).1,
-            );
+            let mut cmd_rx = std::mem::replace(&mut self.command_rx, mpsc::channel(1).1);
+            let mut cold_rx = std::mem::replace(&mut self.cold_restart_rx, mpsc::channel(1).1);
 
             let outcome = if self.pause.paused {
                 // Pause mode: wait for interrupt or timeout
@@ -165,7 +174,10 @@ impl StateMachine {
         // Ceiling check: if the next state matches the ceiling, auto-pause
         if let Some(ref ceiling) = self.pause.ceiling_state {
             if &next == ceiling {
-                log::info!("State machine reached ceiling state {} — auto-pausing", next);
+                log::info!(
+                    "State machine reached ceiling state {} — auto-pausing",
+                    next
+                );
                 self.pause.paused = true;
                 self.pause.ceiling_state = None;
             }
@@ -182,7 +194,10 @@ impl StateMachine {
         }
 
         // Reset 2FA device state when starting a new login cycle
-        if matches!(next, State::WaitingForLogin | State::Launching | State::Restarting) {
+        if matches!(
+            next,
+            State::WaitingForLogin | State::Launching | State::Restarting
+        ) {
             self.twofa_device_selected = false;
         }
 
@@ -248,7 +263,10 @@ impl StateMachine {
                     self.state = State::Init;
                     self.record_transition(&old, &State::Init);
                 } else {
-                    log::info!("START received but not in WaitingForLaunch (state={}) — ignoring", self.state);
+                    log::info!(
+                        "START received but not in WaitingForLaunch (state={}) — ignoring",
+                        self.state
+                    );
                 }
             }
             Command::Restart => {
@@ -326,8 +344,15 @@ impl StateMachine {
 
     /// If IB system unavailable and not already in WaitingForIB, transition there.
     fn check_ib_system_availability(&mut self) {
-        if !self.ib_status.available && self.state != State::WaitingForIB && self.state != State::Shutdown && self.state != State::WaitingForLaunch {
-            log::warn!("IB system unavailable: {} — transitioning to WaitingForIB", self.ib_status.reason);
+        if !self.ib_status.available
+            && self.state != State::WaitingForIB
+            && self.state != State::Shutdown
+            && self.state != State::WaitingForLaunch
+        {
+            log::warn!(
+                "IB system unavailable: {} — transitioning to WaitingForIB",
+                self.ib_status.reason
+            );
             self.ib_status.return_state = Some(Box::new(self.state.clone()));
             let old = self.state.clone();
             self.state = State::WaitingForIB;
@@ -431,7 +456,9 @@ impl StateMachine {
 
         loop {
             if !self.supervisor.is_running() {
-                return Ok(State::Error("JVM process exited before agent became ready".into()));
+                return Ok(State::Error(
+                    "JVM process exited before agent became ready".into(),
+                ));
             }
 
             match self.agent_client.health().await {
@@ -441,7 +468,9 @@ impl StateMachine {
                 }
                 Ok(false) | Err(_) => {
                     if start.elapsed() > max_wait {
-                        return Ok(State::Error("Timed out waiting for agent health check".into()));
+                        return Ok(State::Error(
+                            "Timed out waiting for agent health check".into(),
+                        ));
                     }
                     tokio::time::sleep(poll_interval).await;
                 }
@@ -454,7 +483,9 @@ impl StateMachine {
         // Don't touch the login window — just wait for Gateway to reach the main
         // trading window. This mirrors IBC's SessionManager.isRestart() behavior.
         if self.warm_restart_pending.is_some() {
-            log::info!("Warm restart: waiting for Gateway to self-authenticate (not touching login)");
+            log::info!(
+                "Warm restart: waiting for Gateway to self-authenticate (not touching login)"
+            );
             let max_wait = std::time::Duration::from_secs(120);
             let poll_interval = std::time::Duration::from_secs(2);
             let start = std::time::Instant::now();
@@ -508,51 +539,48 @@ impl StateMachine {
 
         loop {
             if !self.supervisor.is_running() {
-                return Ok(State::Error("JVM process exited while waiting for login window".into()));
+                return Ok(State::Error(
+                    "JVM process exited while waiting for login window".into(),
+                ));
             }
 
             // Check for blocking dialogs (re-login, 2FA) before looking for login window
             if let Some(next_state) = self.check_blocking_dialog().await {
-                log::info!("Blocking dialog detected while waiting for login — transitioning to {}", next_state);
+                log::info!(
+                    "Blocking dialog detected while waiting for login — transitioning to {}",
+                    next_state
+                );
                 return Ok(next_state);
             }
 
             match self.agent_client.list_windows().await {
                 Ok(windows) => {
-                    let mut has_login_form = false;
-                    let mut has_main_window = false;
-
                     for w in &windows {
                         let title_lower = w.title.to_lowercase();
-                        let class_lower = w.class.to_lowercase();
 
                         if title_lower.contains("existing session") {
                             log::info!("Session conflict dialog detected: {}", w.title);
                             return Ok(State::HandlingSessionConflict);
                         }
-
-                        // Login form: class contains "login" (jclient.login.as)
-                        if class_lower.contains("login") {
-                            has_login_form = true;
-                        }
-
-                        // Main Gateway window: title matches but class is NOT login
-                        if (title_lower.contains("ib gateway") || title_lower.contains("ibkr gateway"))
-                            && !class_lower.contains("login")
-                        {
-                            has_main_window = true;
-                        }
                     }
 
-                    if has_login_form {
-                        log::info!("Login form detected — proceeding to authenticate");
-                        return Ok(State::Authenticating);
-                    }
+                    let main_window = windows.iter().find(|w| {
+                        let title_lower = w.title.to_lowercase();
+                        title_lower.contains("ib gateway") || title_lower.contains("ibkr gateway")
+                    });
 
-                    if has_main_window && !has_login_form {
-                        // Gateway already authenticated (e.g., paper auto-login).
-                        // The main window is showing but no login form exists.
-                        log::info!("Gateway already authenticated — main window present, no login form");
+                    if let Some(main_window) = main_window {
+                        // Window class is not stable across Gateway releases.
+                        // Inspect components directly: login windows expose
+                        // username/password text fields; connected windows do not.
+                        if self.window_has_text_fields(main_window).await {
+                            log::info!("Login form detected (text fields present) — proceeding to authenticate");
+                            return Ok(State::Authenticating);
+                        }
+
+                        log::info!(
+                            "Gateway already authenticated — main window present, no text fields"
+                        );
                         return Ok(State::DismissingPopups);
                     }
                 }
@@ -586,33 +614,34 @@ impl StateMachine {
 
         // Check for blocking dialogs (re-login, 2FA) before attempting login
         if let Some(next_state) = self.check_blocking_dialog().await {
-            log::info!("Blocking dialog detected during authentication — transitioning to {}", next_state);
+            log::info!(
+                "Blocking dialog detected during authentication — transitioning to {}",
+                next_state
+            );
             return Ok(next_state);
         }
 
         let windows = self.agent_client.list_windows().await?;
 
-        // Find the login form by class (not title — the main window also says "IBKR Gateway")
-        let login_window = windows.iter().find(|w| w.class.to_lowercase().contains("login"));
+        let main_window = windows.iter().find(|w| {
+            let title_lower = w.title.to_lowercase();
+            title_lower.contains("ib gateway") || title_lower.contains("ibkr gateway")
+        });
 
-        // If no login form exists but the main Gateway window is showing,
-        // Gateway already authenticated (e.g., paper auto-login without 2FA)
-        if login_window.is_none() {
-            let has_main = windows.iter().any(|w| {
-                let t = w.title.to_lowercase();
-                (t.contains("ib gateway") || t.contains("ibkr gateway")) && !w.class.to_lowercase().contains("login")
-            });
-            if has_main {
-                log::info!("No login form but main Gateway window present — already authenticated");
-                return Ok(State::DismissingPopups);
-            }
+        let Some(win) = main_window else {
             return Ok(State::WaitingForLogin);
+        };
+
+        if !self.window_has_text_fields(win).await {
+            log::info!("Main Gateway window present but no text fields — already authenticated");
+            return Ok(State::DismissingPopups);
         }
 
-        // Safety: login_window.is_none() was checked above and returned early
-        let Some(win) = login_window else { return Ok(State::WaitingForLogin) };
-
-        match self.handler_registry.dispatch(&self.agent_client, win).await {
+        match self
+            .handler_registry
+            .dispatch(&self.agent_client, win)
+            .await
+        {
             Some(Ok(crate::handlers::HandlerResult::Handled)) => {
                 log::info!("Login submitted via handler");
             }
@@ -657,8 +686,15 @@ impl StateMachine {
         let grace_period = std::time::Duration::from_secs(10);
         let mut consecutive_agent_failures: u32 = 0;
 
-        log::info!("Checking for 2FA dialog (timeout={}s, totp={})",
-            timeout_secs, if has_totp { "configured" } else { "not configured (IB Key/mobile)" });
+        log::info!(
+            "Checking for 2FA dialog (timeout={}s, totp={})",
+            timeout_secs,
+            if has_totp {
+                "configured"
+            } else {
+                "not configured (IB Key/mobile)"
+            }
+        );
 
         loop {
             if !self.supervisor.is_running() {
@@ -668,7 +704,10 @@ impl StateMachine {
             // Check for blocking dialogs (re-login, authenticating splash)
             if let Some(next_state) = self.check_blocking_dialog().await {
                 if next_state == State::WaitingForLogin {
-                    log::info!("Blocking dialog detected during 2FA wait — transitioning to {}", next_state);
+                    log::info!(
+                        "Blocking dialog detected during 2FA wait — transitioning to {}",
+                        next_state
+                    );
                     return Ok(next_state);
                 }
             }
@@ -676,16 +715,16 @@ impl StateMachine {
             match self.agent_client.list_windows().await {
                 Ok(windows) => {
                     consecutive_agent_failures = 0;
-                    let has_conflict = windows.iter().any(|w| {
-                        w.title.to_lowercase().contains("existing session")
-                    });
+                    let has_conflict = windows
+                        .iter()
+                        .any(|w| w.title.to_lowercase().contains("existing session"));
                     if has_conflict {
                         return Ok(State::HandlingSessionConflict);
                     }
 
-                    let twofa = windows.iter().find(|w| {
-                        w.title.to_lowercase().contains("second factor")
-                    });
+                    let twofa = windows
+                        .iter()
+                        .find(|w| w.title.to_lowercase().contains("second factor"));
 
                     if let Some(win) = twofa {
                         if !twofa_seen {
@@ -697,10 +736,15 @@ impl StateMachine {
                             let twofa_device = &self.config.twofa.device;
                             if !twofa_device.is_empty() {
                                 log::info!("Selecting 2FA device: {}", twofa_device);
-                                match self.agent_client.select_list_item(win.id, twofa_device).await {
+                                match self
+                                    .agent_client
+                                    .select_list_item(win.id, twofa_device)
+                                    .await
+                                {
                                     Ok(true) => {
                                         log::info!("Selected '{}' in device list", twofa_device);
-                                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                                        tokio::time::sleep(std::time::Duration::from_millis(300))
+                                            .await;
                                         let _ = self.agent_client.click_button(win.id, "OK").await;
                                         log::info!("Clicked OK on device selection — waiting for 2FA challenge");
                                         self.twofa_device_selected = true;
@@ -718,14 +762,21 @@ impl StateMachine {
                         }
 
                         if has_totp {
-                            match self.handler_registry.dispatch(&self.agent_client, win).await {
+                            match self
+                                .handler_registry
+                                .dispatch(&self.agent_client, win)
+                                .await
+                            {
                                 Some(Ok(crate::handlers::HandlerResult::Handled)) => {
                                     log::info!("TOTP code submitted, waiting for verification");
                                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                                     return Ok(State::DismissingPopups);
                                 }
                                 Some(Ok(crate::handlers::HandlerResult::Error(msg))) => {
-                                    log::error!("TOTP entry failed: {} — will retry on next loop", msg);
+                                    log::error!(
+                                        "TOTP entry failed: {} — will retry on next loop",
+                                        msg
+                                    );
                                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                                     continue;
                                 }
@@ -760,7 +811,9 @@ impl StateMachine {
                             log::info!("2FA completed (confirmed — dialog gone for 3s)");
                             return Ok(State::DismissingPopups);
                         } else {
-                            log::warn!("2FA dialog reappeared after brief disappearance — still waiting");
+                            log::warn!(
+                                "2FA dialog reappeared after brief disappearance — still waiting"
+                            );
                             continue;
                         }
                     } else if !twofa_seen && start.elapsed() > grace_period {
@@ -780,7 +833,8 @@ impl StateMachine {
 
             if start.elapsed() > max_wait {
                 if self.config.twofa.relogin_after_timeout
-                    || self.config.twofa.timeout_action == crate::config::TwoFaTimeoutAction::Restart
+                    || self.config.twofa.timeout_action
+                        == crate::config::TwoFaTimeoutAction::Restart
                 {
                     log::warn!(
                         "2FA timed out after {}s — restarting login sequence (will retry until approved)",
@@ -800,12 +854,16 @@ impl StateMachine {
         log::info!("Handling session conflict dialog");
 
         let windows = self.agent_client.list_windows().await?;
-        let conflict = windows.iter().find(|w| {
-            w.title.to_lowercase().contains("existing session")
-        });
+        let conflict = windows
+            .iter()
+            .find(|w| w.title.to_lowercase().contains("existing session"));
 
         if let Some(win) = conflict {
-            match self.handler_registry.dispatch(&self.agent_client, win).await {
+            match self
+                .handler_registry
+                .dispatch(&self.agent_client, win)
+                .await
+            {
                 Some(Ok(_)) => log::info!("Session conflict resolved"),
                 Some(Err(e)) => log::error!("Session conflict handling failed: {}", e),
                 None => log::warn!("No handler matched session conflict dialog"),
@@ -831,7 +889,10 @@ impl StateMachine {
 
             // Check for blocking dialogs that require state changes (re-login, 2FA)
             if let Some(next_state) = self.check_blocking_dialog().await {
-                log::info!("Blocking dialog detected during popup dismissal — transitioning to {}", next_state);
+                log::info!(
+                    "Blocking dialog detected during popup dismissal — transitioning to {}",
+                    next_state
+                );
                 // Only reset handlers for states that start a new login cycle.
                 // WaitingFor2fa is part of the current login flow — resetting would
                 // clear LoginHandler's login_submitted flag and cause a double login.
@@ -845,7 +906,11 @@ impl StateMachine {
 
             if let Ok(windows) = self.agent_client.list_windows().await {
                 for win in &windows {
-                    if let Some(Ok(_)) = self.handler_registry.dispatch(&self.agent_client, win).await {
+                    if let Some(Ok(_)) = self
+                        .handler_registry
+                        .dispatch(&self.agent_client, win)
+                        .await
+                    {
                         log::info!("Dismissed popup: {}", win.title);
                         found_popup = true;
                         last_popup = std::time::Instant::now();
@@ -854,7 +919,10 @@ impl StateMachine {
             }
 
             if !found_popup && last_popup.elapsed() > quiet_threshold {
-                log::info!("No popups for {:?} — waiting for API readiness", quiet_threshold);
+                log::info!(
+                    "No popups for {:?} — waiting for API readiness",
+                    quiet_threshold
+                );
                 return Ok(State::WaitingForApiReady);
             }
 
@@ -883,7 +951,10 @@ impl StateMachine {
 
             // Guard: check for blocking dialogs (re-login, 2FA, session conflict)
             if let Some(next_state) = self.check_blocking_dialog().await {
-                log::info!("Blocking dialog detected while waiting for API — transitioning to {}", next_state);
+                log::info!(
+                    "Blocking dialog detected while waiting for API — transitioning to {}",
+                    next_state
+                );
                 return Ok(next_state);
             }
 
@@ -895,31 +966,16 @@ impl StateMachine {
                 });
 
                 if let Some(main) = main_window {
-                    let class_lower = main.class.to_lowercase();
-
-                    // Login form still present — not ready
-                    if class_lower.contains("login") {
-                        log::debug!("WaitingForApiReady: login form still present (class={})", main.class);
+                    if self.window_has_text_fields(main).await {
+                        log::debug!(
+                            "WaitingForApiReady: text fields present — login/auth in progress"
+                        );
                     } else {
-                        // Main window class is not a login form.
-                        // Confirm no text fields (login forms have username/password fields)
-                        use crate::types::WindowId;
-                        let has_login_fields = if let Ok(components) = self.agent_client.dump_components(WindowId(main.id.0)).await {
-                            components.get("textfields")
-                                .and_then(|t| t.as_array())
-                                .map(|a| !a.is_empty())
-                                .unwrap_or(false)
-                        } else {
-                            false
-                        };
-
-                        if has_login_fields {
-                            log::debug!("WaitingForApiReady: text fields present — login/auth in progress");
-                        } else {
-                            // No login class, no text fields — Gateway appears connected
-                            log::info!("Gateway window ready (class={}) — proceeding to configure", main.class);
-                            return Ok(State::ConfiguringApi);
-                        }
+                        log::info!(
+                            "Gateway window ready (class={}) — proceeding to configure",
+                            main.class
+                        );
+                        return Ok(State::ConfiguringApi);
                     }
                 } else {
                     log::debug!("WaitingForApiReady: no main window found yet");
@@ -927,7 +983,10 @@ impl StateMachine {
             }
 
             if start.elapsed() > timeout {
-                log::warn!("Gateway not ready after {:?} — proceeding to ConfiguringApi anyway", timeout);
+                log::warn!(
+                    "Gateway not ready after {:?} — proceeding to ConfiguringApi anyway",
+                    timeout
+                );
                 return Ok(State::ConfiguringApi);
             }
 
@@ -946,7 +1005,10 @@ impl StateMachine {
 
         // Guard: check for any blocking dialog (re-login, 2FA, session conflict)
         if let Some(next_state) = self.check_blocking_dialog().await {
-            log::warn!("Blocking dialog detected — cannot configure API, transitioning to {}", next_state);
+            log::warn!(
+                "Blocking dialog detected — cannot configure API, transitioning to {}",
+                next_state
+            );
             self.config_retries = 0;
             return Ok(next_state);
         }
@@ -961,12 +1023,19 @@ impl StateMachine {
         self.config_retries += 1;
         log::info!(
             "Applying post-login API configuration (attempt {}/{})",
-            self.config_retries, MAX_CONFIG_RETRIES
+            self.config_retries,
+            MAX_CONFIG_RETRIES
         );
 
         let settings = crate::handlers::api_config::ApiConfigSettings::from_env();
 
-        match crate::handlers::api_config::apply_api_config(&self.agent_client, &settings, self.config.timing.ui_tick_ms).await {
+        match crate::handlers::api_config::apply_api_config(
+            &self.agent_client,
+            &settings,
+            self.config.timing.ui_tick_ms,
+        )
+        .await
+        {
             Ok(()) => {
                 log::info!("API configuration complete");
                 self.config_retries = 0;
@@ -981,12 +1050,18 @@ impl StateMachine {
                     // Proceed to Connected and let the user configure manually if needed.
                     log::warn!(
                         "API configuration failed {} times — proceeding without config: {}",
-                        MAX_CONFIG_RETRIES, e
+                        MAX_CONFIG_RETRIES,
+                        e
                     );
                     self.config_retries = 0;
                     Ok(State::Connected)
                 } else {
-                    log::error!("API configuration FAILED: {} — will retry ({}/{})", e, self.config_retries, MAX_CONFIG_RETRIES);
+                    log::error!(
+                        "API configuration FAILED: {} — will retry ({}/{})",
+                        e,
+                        self.config_retries,
+                        MAX_CONFIG_RETRIES
+                    );
                     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     Ok(State::ConfiguringApi)
                 }
@@ -1010,14 +1085,23 @@ impl StateMachine {
             }
         }
 
-        let (api_port, socat_port) = if self.config.auth.trading_mode == crate::config::TradingMode::Paper {
-            (self.config.gateway.paper_api_port, self.config.gateway.paper_socat_port)
-        } else {
-            (self.config.gateway.live_api_port, self.config.gateway.live_socat_port)
-        };
+        let (api_port, socat_port) =
+            if self.config.auth.trading_mode == crate::config::TradingMode::Paper {
+                (
+                    self.config.gateway.paper_api_port,
+                    self.config.gateway.paper_socat_port,
+                )
+            } else {
+                (
+                    self.config.gateway.live_api_port,
+                    self.config.gateway.live_socat_port,
+                )
+            };
 
         // Start socat if not already running
-        let socat_alive = self.socat_process.as_mut()
+        let socat_alive = self
+            .socat_process
+            .as_mut()
             .map(|c| c.try_wait().ok().flatten().is_none())
             .unwrap_or(false);
         if !socat_alive {
@@ -1036,9 +1120,12 @@ impl StateMachine {
                     if let Ok(windows) = client.list_windows().await {
                         for w in &windows {
                             if let Ok(tabs_data) = client.list_tabs(w.id).await {
-                                if let Some(tabs) = tabs_data.get("tabs").and_then(|t| t.as_array()) {
+                                if let Some(tabs) = tabs_data.get("tabs").and_then(|t| t.as_array())
+                                {
                                     for tab in tabs {
-                                        if let Some(title) = tab.get("title").and_then(|t| t.as_str()) {
+                                        if let Some(title) =
+                                            tab.get("title").and_then(|t| t.as_str())
+                                        {
                                             ids.push(title.to_string());
                                         }
                                     }
@@ -1072,7 +1159,9 @@ impl StateMachine {
         }
 
         // Check socat health — restart if it died
-        let socat_alive = self.socat_process.as_mut()
+        let socat_alive = self
+            .socat_process
+            .as_mut()
             .map(|c| c.try_wait().ok().flatten().is_none())
             .unwrap_or(false);
         if !socat_alive {
@@ -1092,28 +1181,22 @@ impl StateMachine {
                 }) {
                     if main.class != *expected_class {
                         // Class changed — confirm it's a login form by checking for text fields
-                        use crate::types::WindowId;
-                        if let Ok(components) = self.agent_client.dump_components(WindowId(main.id.0)).await {
-                            let has_textfields = components.get("textfields")
-                                .and_then(|t| t.as_array())
-                                .map(|a| !a.is_empty())
-                                .unwrap_or(false);
-                            if has_textfields {
-                                log::warn!(
-                                    "Session lost — login form detected (class changed: {} → {}, text fields present)",
-                                    expected_class, main.class
-                                );
-                                self.connected_window_class = None;
-                                self.handler_registry.reset();
-                                self.abort_client_id_task();
-                                return Ok(State::WaitingForLogin);
-                            } else {
-                                log::info!(
-                                    "Window class changed {} → {} (no login form — benign UI update)",
-                                    expected_class, main.class
-                                );
-                                self.connected_window_class = Some(main.class.clone());
-                            }
+                        if self.window_has_text_fields(main).await {
+                            log::warn!(
+                                "Session lost — login form detected (class changed: {} → {}, text fields present)",
+                                expected_class, main.class
+                            );
+                            self.connected_window_class = None;
+                            self.handler_registry.reset();
+                            self.abort_client_id_task();
+                            return Ok(State::WaitingForLogin);
+                        } else {
+                            log::info!(
+                                "Window class changed {} → {} (no login form — benign UI update)",
+                                expected_class,
+                                main.class
+                            );
+                            self.connected_window_class = Some(main.class.clone());
                         }
                     }
                 }
@@ -1129,7 +1212,10 @@ impl StateMachine {
                     return Ok(State::ReconnectingSession);
                 }
 
-                let _ = self.handler_registry.dispatch(&self.agent_client, win).await;
+                let _ = self
+                    .handler_registry
+                    .dispatch(&self.agent_client, win)
+                    .await;
             }
         }
 
@@ -1165,7 +1251,8 @@ impl StateMachine {
         let max = self.config.timing.relogin_max_attempts;
         log::info!(
             "ReconnectingSession: attempt {}/{} — connection lost",
-            self.relogin_attempts, max
+            self.relogin_attempts,
+            max
         );
 
         if self.relogin_attempts > max {
@@ -1218,7 +1305,10 @@ impl StateMachine {
 
             // Still showing — click Re-login
             if let Some(d) = dialog {
-                log::info!("Clicking Re-login to attempt reconnection (attempt {})", self.relogin_attempts);
+                log::info!(
+                    "Clicking Re-login to attempt reconnection (attempt {})",
+                    self.relogin_attempts
+                );
                 let _ = self.agent_client.click_button(d.id, "Re-login").await;
                 self.handler_registry.reset();
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
@@ -1236,7 +1326,10 @@ impl StateMachine {
     async fn do_restart(&mut self) -> Result<State, StateMachineError> {
         let delay = self.config.timing.restart_delay_secs;
         if delay > 0 {
-            log::info!("Waiting {}s before restarting Gateway (giving time to self-recover)", delay);
+            log::info!(
+                "Waiting {}s before restarting Gateway (giving time to self-recover)",
+                delay
+            );
             let start = std::time::Instant::now();
             while start.elapsed().as_secs() < delay {
                 self.process_queries().await;
@@ -1279,7 +1372,10 @@ impl StateMachine {
     }
 
     async fn do_waiting_for_ib(&mut self) -> Result<State, StateMachineError> {
-        log::info!("Waiting for IB system to become available ({})", self.ib_status.reason);
+        log::info!(
+            "Waiting for IB system to become available ({})",
+            self.ib_status.reason
+        );
 
         // Process queries and commands so dashboard stays responsive
         self.process_queries().await;
@@ -1349,8 +1445,13 @@ impl StateMachine {
                     // Re-login dialogs: route to ReconnectingSession for graduated recovery.
                     // Do NOT click Cancel here — ReconnectingSession owns the re-login flow.
                     let t = w.title.to_lowercase();
-                    if t.contains("re-login") || t.contains("relogin") || t.contains("login is required") {
-                        log::info!("RE-LOGIN dialog detected — transitioning to ReconnectingSession");
+                    if t.contains("re-login")
+                        || t.contains("relogin")
+                        || t.contains("login is required")
+                    {
+                        log::info!(
+                            "RE-LOGIN dialog detected — transitioning to ReconnectingSession"
+                        );
                         return Some(State::ReconnectingSession);
                     }
                     return Some(state);
@@ -1382,7 +1483,15 @@ impl StateMachine {
         match cmd {
             Command::IbStatus(ref status, ref reason) => {
                 let available = status == "available";
-                log::info!("IB system status update: {} ({})", status, if reason.is_empty() { "no reason" } else { reason });
+                log::info!(
+                    "IB system status update: {} ({})",
+                    status,
+                    if reason.is_empty() {
+                        "no reason"
+                    } else {
+                        reason
+                    }
+                );
                 self.ib_status.available = available;
                 self.ib_status.status = status.clone();
                 self.ib_status.reason = reason.clone();
@@ -1391,11 +1500,18 @@ impl StateMachine {
             }
             Command::RestartSocat => {
                 log::info!("Restarting socat port forwarding");
-                let (api_port, socat_port) = if self.config.auth.trading_mode == crate::config::TradingMode::Paper {
-                    (self.config.gateway.paper_api_port, self.config.gateway.paper_socat_port)
-                } else {
-                    (self.config.gateway.live_api_port, self.config.gateway.live_socat_port)
-                };
+                let (api_port, socat_port) =
+                    if self.config.auth.trading_mode == crate::config::TradingMode::Paper {
+                        (
+                            self.config.gateway.paper_api_port,
+                            self.config.gateway.paper_socat_port,
+                        )
+                    } else {
+                        (
+                            self.config.gateway.live_api_port,
+                            self.config.gateway.live_socat_port,
+                        )
+                    };
                 self.stop_socat();
                 self.start_socat(api_port, socat_port);
                 Ok(())
@@ -1462,7 +1578,10 @@ impl StateMachine {
                 }
             }
             Command::SetRestartTime(ref time_str) => {
-                log::info!("SETRESTART: setting auto-restart time to {} (UTC)", time_str);
+                log::info!(
+                    "SETRESTART: setting auto-restart time to {} (UTC)",
+                    time_str
+                );
                 let settings = crate::handlers::api_config::ApiConfigSettings {
                     master_client_id: None,
                     read_only_api: None,
@@ -1473,8 +1592,12 @@ impl StateMachine {
                 };
                 let tick_ms = self.config.timing.ui_tick_ms;
                 match crate::handlers::api_config::apply_api_config(
-                    &self.agent_client, &settings, tick_ms,
-                ).await {
+                    &self.agent_client,
+                    &settings,
+                    tick_ms,
+                )
+                .await
+                {
                     Ok(()) => log::info!("SETRESTART: auto-restart time set to {}", time_str),
                     Err(e) => log::error!("SETRESTART failed: {}", e),
                 }
@@ -1488,15 +1611,19 @@ impl StateMachine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent_client::{AgentClient, MockAgent};
+    use crate::agent_client::{AgentClient, MockAgent, WindowInfo};
     use crate::config::{Config, ValidConfig};
     use crate::handlers::DialogHandlerRegistry;
     use crate::supervisor::Supervisor;
-    use crate::types::{ColdRestartSignal, Command, Signal};
+    use crate::types::{ColdRestartSignal, Command, Signal, WindowId};
 
     fn make_test_state_machine() -> StateMachine {
+        make_test_state_machine_with_agent(MockAgent::default())
+    }
+
+    fn make_test_state_machine_with_agent(mock_agent: MockAgent) -> StateMachine {
         let config = ValidConfig::new_unchecked(Config::default());
-        let agent_client = AgentClient::mock(MockAgent::default());
+        let agent_client = AgentClient::mock(mock_agent);
         let supervisor = Supervisor::new(
             config.gateway.clone(),
             "/tmp/ibctl-agent.jar",
@@ -1522,6 +1649,16 @@ mod tests {
                 cold_restart: cold_restart_rx,
             },
         )
+    }
+
+    fn gateway_window(class: &str) -> WindowInfo {
+        WindowInfo {
+            id: WindowId(1),
+            title: "IBKR Gateway".to_string(),
+            class: class.to_string(),
+            bounds: None,
+            visible: true,
+        }
     }
 
     #[test]
@@ -1581,10 +1718,7 @@ mod tests {
 
     #[test]
     fn test_normal_window_not_blocking() {
-        assert_eq!(
-            StateMachine::classify_blocking_dialog("IBKR Gateway"),
-            None,
-        );
+        assert_eq!(StateMachine::classify_blocking_dialog("IBKR Gateway"), None,);
     }
 
     #[test]
@@ -1643,12 +1777,57 @@ mod tests {
         assert_eq!(sm.state, State::Launching);
     }
 
+    #[tokio::test]
+    async fn test_window_has_text_fields_detects_login_form_when_class_is_generic() {
+        let sm = make_test_state_machine_with_agent(MockAgent {
+            windows: vec![gateway_window("ibgateway.az")],
+            components: serde_json::json!({
+                "textfields": [{ "index": 0 }, { "index": 1 }]
+            }),
+            ..Default::default()
+        });
+
+        let has_text_fields = sm
+            .window_has_text_fields(&gateway_window("ibgateway.az"))
+            .await;
+
+        assert!(has_text_fields);
+    }
+
+    #[tokio::test]
+    async fn test_authenticate_treats_generic_main_window_without_text_fields_as_connected() {
+        let mut sm = make_test_state_machine_with_agent(MockAgent {
+            windows: vec![gateway_window("ibgateway.az")],
+            components: serde_json::json!({
+                "textfields": []
+            }),
+            ..Default::default()
+        });
+
+        let next = sm.do_authenticate().await.unwrap();
+
+        assert_eq!(next, State::DismissingPopups);
+    }
+
+    #[tokio::test]
+    async fn test_window_has_text_fields_returns_false_for_connected_gateway_window() {
+        let sm = make_test_state_machine_with_agent(MockAgent {
+            components: serde_json::json!({
+                "textfields": []
+            }),
+            ..Default::default()
+        });
+
+        let has_text_fields = sm
+            .window_has_text_fields(&gateway_window("ibgateway.az"))
+            .await;
+
+        assert!(!has_text_fields);
+    }
+
     #[test]
     fn test_paper_warning_not_blocking() {
-        assert_eq!(
-            StateMachine::classify_blocking_dialog("Warning"),
-            None,
-        );
+        assert_eq!(StateMachine::classify_blocking_dialog("Warning"), None,);
     }
 
     // --- Channel closure tests (issue #1: closed channel busy-loop) ---
@@ -1669,7 +1848,10 @@ mod tests {
             Some(_) = rx.recv() => "cold_restart_fired",
             _ = tokio::time::sleep(std::time::Duration::from_millis(50)) => "timeout",
         };
-        assert_eq!(result, "timeout", "closed cold_restart channel must not fire");
+        assert_eq!(
+            result, "timeout",
+            "closed cold_restart channel must not fire"
+        );
     }
 
     #[tokio::test]
@@ -1717,7 +1899,10 @@ mod tests {
             Some(_) = cold_rx.recv() => "cold_restart",
             _ = tokio::time::sleep(std::time::Duration::from_millis(50)) => "timeout",
         };
-        assert_eq!(result, "cold_restart", "live channel must still deliver with closed siblings");
+        assert_eq!(
+            result, "cold_restart",
+            "live channel must still deliver with closed siblings"
+        );
     }
 
     #[tokio::test]
@@ -1740,7 +1925,10 @@ mod tests {
             Some(_) = rx3.recv() => "cold_restart",
             _ = tokio::time::sleep(std::time::Duration::from_millis(10)) => "transition",
         };
-        assert_eq!(result, "transition", "closed channels must not starve transition branch");
+        assert_eq!(
+            result, "transition",
+            "closed channels must not starve transition branch"
+        );
     }
 
     // --- Login timeout configuration tests ---
@@ -1767,7 +1955,12 @@ login_dialog_timeout_secs = 0
     async fn test_ibstatus_command_received_via_try_recv() {
         // Simulate: IBSTATUS command arrives on command channel
         let (tx, mut rx) = tokio::sync::mpsc::channel::<Command>(32);
-        tx.send(Command::IbStatus("maintenance".into(), "weekend reset".into())).await.unwrap();
+        tx.send(Command::IbStatus(
+            "maintenance".into(),
+            "weekend reset".into(),
+        ))
+        .await
+        .unwrap();
 
         // try_recv should get it without blocking
         match rx.try_recv() {

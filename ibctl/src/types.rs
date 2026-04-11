@@ -23,9 +23,13 @@ impl std::fmt::Display for WindowId {
 pub struct TotpCode(String);
 
 impl TotpCode {
-    pub fn new(code: String) -> Self { Self(code) }
+    pub fn new(code: String) -> Self {
+        Self(code)
+    }
     /// Consume the code, returning the inner string.
-    pub fn into_inner(self) -> String { self.0 }
+    pub fn into_inner(self) -> String {
+        self.0
+    }
 }
 
 // ---------------------------------------------------------------------------
