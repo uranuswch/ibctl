@@ -18,9 +18,9 @@ pub enum ApiConfigError {
 
 /// Parse an env var as a boolean: "yes", "true", "1" → true.
 fn env_bool(var: &str) -> Option<bool> {
-    std::env::var(var).ok().map(|v| {
-        matches!(v.to_lowercase().as_str(), "yes" | "true" | "1")
-    })
+    std::env::var(var)
+        .ok()
+        .map(|v| matches!(v.to_lowercase().as_str(), "yes" | "true" | "1"))
 }
 
 /// API configuration settings resolved from environment variables.
@@ -39,14 +39,17 @@ pub struct ApiConfigSettings {
 impl ApiConfigSettings {
     pub fn from_env() -> Self {
         Self {
-            master_client_id: std::env::var("TWS_MASTER_CLIENT_ID").ok()
+            master_client_id: std::env::var("TWS_MASTER_CLIENT_ID")
+                .ok()
                 .filter(|s| !s.is_empty()),
             read_only_api: env_bool("READ_ONLY_API"),
             bypass_order_precautions: env_bool("BYPASS_WARNING"),
             allow_blind_trading: env_bool("ALLOW_BLIND_TRADING"),
-            auto_restart_time: std::env::var("AUTO_RESTART_TIME").ok()
+            auto_restart_time: std::env::var("AUTO_RESTART_TIME")
+                .ok()
                 .filter(|s| !s.is_empty()),
-            auto_logoff_time: std::env::var("AUTO_LOGOFF_TIME").ok()
+            auto_logoff_time: std::env::var("AUTO_LOGOFF_TIME")
+                .ok()
                 .filter(|s| !s.is_empty()),
         }
     }
@@ -105,7 +108,9 @@ pub async fn apply_api_config(
     log::info!("Applying API configuration settings");
 
     // Find the main Gateway window
-    let windows = client.list_windows().await
+    let windows = client
+        .list_windows()
+        .await
         .map_err(|e| ApiConfigError::Other(format!("Failed to list windows: {}", e)))?;
     let main_window = windows.iter().find(|w| {
         let t = w.title.to_lowercase();
@@ -114,7 +119,9 @@ pub async fn apply_api_config(
     let win = match main_window {
         Some(w) => w,
         None => {
-            return Err(ApiConfigError::Other("Main Gateway window not found — cannot apply API config".to_string()));
+            return Err(ApiConfigError::Other(
+                "Main Gateway window not found — cannot apply API config".to_string(),
+            ));
         }
     };
 
@@ -139,13 +146,17 @@ pub async fn apply_api_config(
         for _ in 0..20 {
             tick(tick_ms).await;
             let wins = client.list_windows().await.unwrap_or_default();
-            config_win = wins.into_iter().find(|w| {
-                w.title.to_lowercase().contains("configuration")
-            });
-            if config_win.is_some() { break; }
+            config_win = wins
+                .into_iter()
+                .find(|w| w.title.to_lowercase().contains("configuration"));
+            if config_win.is_some() {
+                break;
+            }
         }
 
-        if config_win.is_some() { break; }
+        if config_win.is_some() {
+            break;
+        }
 
         // Dismiss any lingering menu by clicking the window center
         let cx = win.bounds.as_ref().map(|b| b.width / 2).unwrap_or(350);
@@ -158,17 +169,23 @@ pub async fn apply_api_config(
         Some(w) => w,
         None => {
             log::error!("Configuration dialog not found after 3 attempts — config NOT applied");
-            return Err(ApiConfigError::Other("Configuration dialog not found after 3 attempts".to_string()));
+            return Err(ApiConfigError::Other(
+                "Configuration dialog not found after 3 attempts".to_string(),
+            ));
         }
     };
     let cid = config_win.id;
     log::info!("Configuration dialog found: {}", config_win.title);
 
     // --- API -> Settings ---
-    client.select_tree_node(cid, "API").await
+    client
+        .select_tree_node(cid, "API")
+        .await
         .map_err(|e| ApiConfigError::Other(format!("Failed to select API: {}", e)))?;
     tick(tick_ms).await;
-    client.select_tree_node(cid, "Settings").await
+    client
+        .select_tree_node(cid, "Settings")
+        .await
         .map_err(|_| ApiConfigError::Other("Failed to navigate to API/Settings".to_string()))?;
     tick(tick_ms).await;
 
@@ -235,7 +252,9 @@ pub async fn apply_api_config(
     for _ in 0..3 {
         tick(tick_ms).await;
         let post = client.list_windows().await.unwrap_or_default();
-        if post.len() <= 1 { break; }
+        if post.len() <= 1 {
+            break;
+        }
         for w in &post {
             let _ = client.click_button(w.id, "OK").await;
         }
@@ -245,7 +264,11 @@ pub async fn apply_api_config(
     let final_windows = client.list_windows().await.unwrap_or_default();
     if let Some(main_win) = final_windows.first() {
         let cx = main_win.bounds.as_ref().map(|b| b.width / 2).unwrap_or(350);
-        let cy = main_win.bounds.as_ref().map(|b| b.height / 2).unwrap_or(275);
+        let cy = main_win
+            .bounds
+            .as_ref()
+            .map(|b| b.height / 2)
+            .unwrap_or(275);
         let _ = client.click_at(main_win.id, cx, cy).await;
     }
 

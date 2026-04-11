@@ -10,7 +10,8 @@ fn main() {
     println!("cargo:rerun-if-changed=../.git/refs/tags");
 
     // Priority: IBCTL_BUILD_VERSION env var (set by Dockerfile/CI) > git tag > Cargo.toml
-    let version = std::env::var("IBCTL_BUILD_VERSION").ok()
+    let version = std::env::var("IBCTL_BUILD_VERSION")
+        .ok()
         .filter(|s| !s.is_empty())
         .or_else(git_version)
         .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());

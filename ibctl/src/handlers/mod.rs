@@ -111,11 +111,9 @@ impl DialogHandlerRegistry {
         registry.register(Box::new(relogin::ReloginHandler));
         registry.register(Box::new(ssl_reconnect::SslReconnectHandler));
         registry.register(Box::new(tip_of_day::TipOfDayHandler));
-        registry.register(Box::new(
-            accept_connection::AcceptConnectionHandler::new(
-                config.session.accept_incoming,
-            ),
-        ));
+        registry.register(Box::new(accept_connection::AcceptConnectionHandler::new(
+            config.session.accept_incoming,
+        )));
         registry.register(Box::new(paper_warning::PaperWarningHandler));
         registry.register(Box::new(version_notice::VersionNoticeHandler));
         // Catch-all for Gateway notification dialogs (lowest priority)

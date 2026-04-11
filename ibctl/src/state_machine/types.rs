@@ -7,11 +7,11 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 
 use crate::agent_client::AgentClient;
-use crate::types::{ColdRestartSignal, Command, Query};
 use crate::config::ValidConfig;
 use crate::handlers::DialogHandlerRegistry;
-use crate::types::Signal;
 use crate::supervisor::Supervisor;
+use crate::types::Signal;
+use crate::types::{ColdRestartSignal, Command, Query};
 
 #[derive(Debug, Error)]
 pub enum StateMachineError {
@@ -270,7 +270,9 @@ pub(crate) fn client_advisory(state: &State) -> (bool, bool, Option<&'static str
         State::WaitingForLogin | State::Authenticating => (false, true, Some("logging_in")),
         State::WaitingFor2fa => (false, true, Some("2fa_pending")),
         State::HandlingSessionConflict => (false, true, Some("session_conflict")),
-        State::DismissingPopups | State::WaitingForApiReady | State::ConfiguringApi => (false, true, Some("configuring")),
+        State::DismissingPopups | State::WaitingForApiReady | State::ConfiguringApi => {
+            (false, true, Some("configuring"))
+        }
         State::Connected => (true, false, None),
         State::ReconnectingSession => (false, true, Some("reconnecting")),
         State::Restarting => (false, true, Some("restarting")),
@@ -279,7 +281,12 @@ pub(crate) fn client_advisory(state: &State) -> (bool, bool, Option<&'static str
         State::Error(_) => (false, false, None),
     };
     let client_id_likely_stale = matches!(state, State::Restarting);
-    (should_connect, should_wait, wait_reason, client_id_likely_stale)
+    (
+        should_connect,
+        should_wait,
+        wait_reason,
+        client_id_likely_stale,
+    )
 }
 
 /// Epoch seconds timestamp — browser converts to local time.
@@ -370,11 +377,19 @@ mod tests {
     fn test_all_states_covered() {
         let states = vec![
             State::WaitingForLaunch,
-            State::Init, State::Launching, State::WaitingForAgent,
-            State::WaitingForLogin, State::Authenticating,
-            State::WaitingFor2fa, State::HandlingSessionConflict,
-            State::DismissingPopups, State::WaitingForApiReady, State::ConfiguringApi,
-            State::Connected, State::Restarting, State::Shutdown,
+            State::Init,
+            State::Launching,
+            State::WaitingForAgent,
+            State::WaitingForLogin,
+            State::Authenticating,
+            State::WaitingFor2fa,
+            State::HandlingSessionConflict,
+            State::DismissingPopups,
+            State::WaitingForApiReady,
+            State::ConfiguringApi,
+            State::Connected,
+            State::Restarting,
+            State::Shutdown,
             State::Error("test".into()),
         ];
         for state in &states {

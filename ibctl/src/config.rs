@@ -403,7 +403,6 @@ impl Default for AuthConfig {
     }
 }
 
-
 impl Default for TwoFaConfig {
     fn default() -> Self {
         Self {
@@ -463,7 +462,6 @@ impl Default for AgentConfig {
     }
 }
 
-
 /// A config that has passed all validation checks.
 /// Can only be constructed via `Config::load()`.
 #[derive(Debug, Clone)]
@@ -471,13 +469,17 @@ pub struct ValidConfig(Config);
 
 impl std::ops::Deref for ValidConfig {
     type Target = Config;
-    fn deref(&self) -> &Config { &self.0 }
+    fn deref(&self) -> &Config {
+        &self.0
+    }
 }
 
 #[cfg(test)]
 impl ValidConfig {
     /// Bypass validation for unit tests that need a `ValidConfig` with controlled values.
-    pub fn new_unchecked(config: Config) -> Self { Self(config) }
+    pub fn new_unchecked(config: Config) -> Self {
+        Self(config)
+    }
 }
 
 impl Config {
@@ -497,25 +499,24 @@ impl Config {
             .unwrap_or_else(|| "ibctl.toml".to_string());
 
         if Path::new(&config_path).exists() {
-            let contents = std::fs::read_to_string(&config_path).map_err(|e| {
-                ConfigError::ReadFile {
+            let contents =
+                std::fs::read_to_string(&config_path).map_err(|e| ConfigError::ReadFile {
                     path: config_path.clone(),
                     source: e,
-                }
-            })?;
+                })?;
             config = toml::from_str(&contents)?;
             log::info!("Loaded config from {}", config_path);
         } else if path.is_some() {
             // Explicit path was given but file doesn't exist
             return Err(ConfigError::ReadFile {
                 path: config_path.clone(),
-                source: std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "config file not found",
-                ),
+                source: std::io::Error::new(std::io::ErrorKind::NotFound, "config file not found"),
             });
         } else {
-            log::debug!("No config file found at {}, using defaults + env", config_path);
+            log::debug!(
+                "No config file found at {}, using defaults + env",
+                config_path
+            );
         }
 
         // Layer 3: Environment variable overrides
@@ -569,7 +570,10 @@ impl Config {
                 other => log::warn!("Unknown TWOFA_TIMEOUT_ACTION '{}', keeping default", other),
             }
         }
-        if let Some(v) = std::env::var("TWOFA_EXIT_INTERVAL").ok().and_then(|s| s.parse().ok()) {
+        if let Some(v) = std::env::var("TWOFA_EXIT_INTERVAL")
+            .ok()
+            .and_then(|s| s.parse().ok())
+        {
             self.twofa.timeout_seconds = v;
         }
         if let Ok(v) = std::env::var("TWOFA_DEVICE") {
@@ -594,7 +598,10 @@ impl Config {
         if let Ok(v) = std::env::var("TWS_MAJOR_VRSN") {
             self.gateway.version = v;
         }
-        if let Some(v) = std::env::var("JAVA_HEAP_SIZE").ok().and_then(|s| s.parse().ok()) {
+        if let Some(v) = std::env::var("JAVA_HEAP_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+        {
             self.gateway.java_heap_mb = v;
         }
         if let Ok(v) = std::env::var("GATEWAY_OR_TWS") {
@@ -628,24 +635,36 @@ impl Config {
 
         // Command server
         if let Ok(v) = std::env::var("IBCTL_COMMAND_SERVER_ENABLED") {
-            self.command_server.enabled = v.to_lowercase() != "false" && v != "0" && v.to_lowercase() != "no";
+            self.command_server.enabled =
+                v.to_lowercase() != "false" && v != "0" && v.to_lowercase() != "no";
         }
-        if let Some(v) = std::env::var("IBCTL_COMMAND_PORT").ok().and_then(|s| s.parse().ok()) {
+        if let Some(v) = std::env::var("IBCTL_COMMAND_PORT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+        {
             self.command_server.port = v;
         }
         if let Ok(v) = std::env::var("IBCTL_CONTROL_FROM") {
-            self.command_server.control_from =
-                v.split(',').map(|s| s.trim().to_string()).collect();
+            self.command_server.control_from = v.split(',').map(|s| s.trim().to_string()).collect();
         }
 
         // Timing
-        if let Some(v) = std::env::var("IBCTL_LOGIN_TIMEOUT").ok().and_then(|s| s.parse().ok()) {
+        if let Some(v) = std::env::var("IBCTL_LOGIN_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+        {
             self.timing.login_dialog_timeout_secs = v;
         }
-        if let Some(v) = std::env::var("IBCTL_RESTART_DELAY").ok().and_then(|s| s.parse().ok()) {
+        if let Some(v) = std::env::var("IBCTL_RESTART_DELAY")
+            .ok()
+            .and_then(|s| s.parse().ok())
+        {
             self.timing.restart_delay_secs = v;
         }
-        if let Some(v) = std::env::var("IBCTL_RELOGIN_ATTEMPTS").ok().and_then(|s| s.parse().ok()) {
+        if let Some(v) = std::env::var("IBCTL_RELOGIN_ATTEMPTS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+        {
             self.timing.relogin_max_attempts = v;
         }
 
@@ -694,15 +713,16 @@ impl Config {
                 "TWS_PASSWORD or TWS_PASSWORD_FILE env var".to_string(),
             ));
         }
-        if matches!(self.auth.trading_mode, TradingMode::Both | TradingMode::Paper)
-            && self.auth.paper.username.is_empty()
+        if matches!(
+            self.auth.trading_mode,
+            TradingMode::Both | TradingMode::Paper
+        ) && self.auth.paper.username.is_empty()
             && self.auth.trading_mode == TradingMode::Both
         {
             log::warn!("trading_mode=both but no paper username set; will use main credentials");
         }
         Ok(())
     }
-
 }
 
 /// Read an environment variable, with Docker secrets `_FILE` support.
@@ -716,7 +736,12 @@ pub fn env_or_file(var: &str) -> Option<String> {
         match std::fs::read_to_string(&path) {
             Ok(contents) => return Some(contents.trim().to_string()),
             Err(e) => {
-                log::warn!("Failed to read secret file {} (from {}): {}", path, file_var, e);
+                log::warn!(
+                    "Failed to read secret file {} (from {}): {}",
+                    path,
+                    file_var,
+                    e
+                );
             }
         }
     }
@@ -734,15 +759,21 @@ mod tests {
     #[test]
     fn test_trading_mode_deserialize() {
         assert_eq!(
-            toml::from_str::<AuthConfig>("trading_mode = \"live\"").unwrap().trading_mode,
+            toml::from_str::<AuthConfig>("trading_mode = \"live\"")
+                .unwrap()
+                .trading_mode,
             TradingMode::Live
         );
         assert_eq!(
-            toml::from_str::<AuthConfig>("trading_mode = \"paper\"").unwrap().trading_mode,
+            toml::from_str::<AuthConfig>("trading_mode = \"paper\"")
+                .unwrap()
+                .trading_mode,
             TradingMode::Paper
         );
         assert_eq!(
-            toml::from_str::<AuthConfig>("trading_mode = \"both\"").unwrap().trading_mode,
+            toml::from_str::<AuthConfig>("trading_mode = \"both\"")
+                .unwrap()
+                .trading_mode,
             TradingMode::Both
         );
     }
@@ -750,11 +781,15 @@ mod tests {
     #[test]
     fn test_totp_provider_deserialize() {
         assert_eq!(
-            toml::from_str::<TwoFaConfig>("provider = \"oathtool\"").unwrap().provider,
+            toml::from_str::<TwoFaConfig>("provider = \"oathtool\"")
+                .unwrap()
+                .provider,
             TotpProvider::Oathtool
         );
         assert_eq!(
-            toml::from_str::<TwoFaConfig>("provider = \"builtin\"").unwrap().provider,
+            toml::from_str::<TwoFaConfig>("provider = \"builtin\"")
+                .unwrap()
+                .provider,
             TotpProvider::Builtin
         );
     }
@@ -762,15 +797,21 @@ mod tests {
     #[test]
     fn test_session_action_deserialize() {
         assert_eq!(
-            toml::from_str::<SessionConfig>("action = \"primary\"").unwrap().action,
+            toml::from_str::<SessionConfig>("action = \"primary\"")
+                .unwrap()
+                .action,
             SessionAction::Primary
         );
         assert_eq!(
-            toml::from_str::<SessionConfig>("action = \"secondary\"").unwrap().action,
+            toml::from_str::<SessionConfig>("action = \"secondary\"")
+                .unwrap()
+                .action,
             SessionAction::Secondary
         );
         assert_eq!(
-            toml::from_str::<SessionConfig>("action = \"primaryoverride\"").unwrap().action,
+            toml::from_str::<SessionConfig>("action = \"primaryoverride\"")
+                .unwrap()
+                .action,
             SessionAction::PrimaryOverride
         );
     }
@@ -778,11 +819,15 @@ mod tests {
     #[test]
     fn test_gateway_program_deserialize() {
         assert_eq!(
-            toml::from_str::<GatewayConfig>("program = \"gateway\"").unwrap().program,
+            toml::from_str::<GatewayConfig>("program = \"gateway\"")
+                .unwrap()
+                .program,
             GatewayProgram::Gateway
         );
         assert_eq!(
-            toml::from_str::<GatewayConfig>("program = \"tws\"").unwrap().program,
+            toml::from_str::<GatewayConfig>("program = \"tws\"")
+                .unwrap()
+                .program,
             GatewayProgram::Tws
         );
     }
@@ -790,11 +835,15 @@ mod tests {
     #[test]
     fn test_log_level_deserialize() {
         assert_eq!(
-            toml::from_str::<LoggingConfig>("level = \"debug\"").unwrap().level,
+            toml::from_str::<LoggingConfig>("level = \"debug\"")
+                .unwrap()
+                .level,
             LogLevel::Debug
         );
         assert_eq!(
-            toml::from_str::<LoggingConfig>("level = \"error\"").unwrap().level,
+            toml::from_str::<LoggingConfig>("level = \"error\"")
+                .unwrap()
+                .level,
             LogLevel::Error
         );
     }
@@ -812,7 +861,10 @@ mod tests {
         assert_eq!(TradingMode::Live.to_string(), "live");
         assert_eq!(TradingMode::Paper.to_string(), "paper");
         assert_eq!(TradingMode::Both.to_string(), "both");
-        assert_eq!(SessionAction::PrimaryOverride.to_string(), "primaryoverride");
+        assert_eq!(
+            SessionAction::PrimaryOverride.to_string(),
+            "primaryoverride"
+        );
         assert_eq!(AcceptIncoming::Manual.to_string(), "manual");
         assert_eq!(LogLevel::Warn.to_string(), "warn");
     }
@@ -930,7 +982,8 @@ key = "value"
         let debug_output = format!("{:?}", config.auth);
         assert!(
             !debug_output.contains("supersecret"),
-            "Password leaked in Debug output: {}", debug_output
+            "Password leaked in Debug output: {}",
+            debug_output
         );
         assert!(debug_output.contains("REDACTED"));
     }

@@ -42,12 +42,7 @@ impl DialogHandler for PaperWarningHandler {
             log::info!("Dismissing paper trading warning '{}'", window.title);
 
             // Try button labels in order — IBC tries multiple variants
-            let candidates = [
-                "I understand and accept",
-                "OK",
-                "Yes",
-                "Accept",
-            ];
+            let candidates = ["I understand and accept", "OK", "Yes", "Accept"];
 
             for label in &candidates {
                 match client.click_button(window.id, label).await {

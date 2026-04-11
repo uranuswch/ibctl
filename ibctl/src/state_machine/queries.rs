@@ -36,7 +36,8 @@ impl StateMachine {
                 let json = serde_json::json!({
                     "logs": logs,
                     "limit": limit,
-                }).to_string();
+                })
+                .to_string();
                 let _ = tx.send(json);
             }
             Query::Windows(tx) => {
@@ -54,7 +55,9 @@ impl StateMachine {
     fn build_status_json(&mut self) -> String {
         let uptime = self.start_time.elapsed().as_secs();
         let connected_uptime = self.connected_since.map(|t| t.elapsed().as_secs());
-        let socat_running = self.socat_process.as_mut()
+        let socat_running = self
+            .socat_process
+            .as_mut()
             .map(|c| c.try_wait().ok().flatten().is_none())
             .unwrap_or(false);
         let socat_pid = self.socat_process.as_ref().map(|c| c.id());
@@ -120,7 +123,8 @@ impl StateMachine {
         serde_json::json!({
             "current": self.state.to_string(),
             "history": self.transition_history,
-        }).to_string()
+        })
+        .to_string()
     }
 
     /// Build the CONFIG JSON response (passwords masked).
@@ -160,7 +164,8 @@ impl StateMachine {
                 "role": self.config.site.role.to_string(),
                 "auto_launch": self.config.site.auto_launch,
             },
-        }).to_string()
+        })
+        .to_string()
     }
 
     /// Build the WINDOWS JSON response including client tabs.
@@ -169,11 +174,15 @@ impl StateMachine {
 
         let mut windows_json = Vec::new();
         for w in &windows {
-            let tabs: Vec<serde_json::Value> = if let Ok(dump) = self.agent_client.dump_components(w.id).await {
-                dump.get("tabs").and_then(|t| t.as_array()).cloned().unwrap_or_default()
-            } else {
-                Vec::new()
-            };
+            let tabs: Vec<serde_json::Value> =
+                if let Ok(dump) = self.agent_client.dump_components(w.id).await {
+                    dump.get("tabs")
+                        .and_then(|t| t.as_array())
+                        .cloned()
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
 
             windows_json.push(serde_json::json!({
                 "id": w.id,
@@ -185,6 +194,7 @@ impl StateMachine {
 
         serde_json::json!({
             "windows": windows_json,
-        }).to_string()
+        })
+        .to_string()
     }
 }

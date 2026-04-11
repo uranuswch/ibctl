@@ -34,7 +34,10 @@ pub fn parse_cold_restart_time(time_str: &str) -> Option<(u32, u32)> {
 
     let parts: Vec<&str> = time_str.split(':').collect();
     if parts.len() != 2 {
-        log::warn!("Invalid cold restart time format '{}' — expected HH:MM", time_str);
+        log::warn!(
+            "Invalid cold restart time format '{}' — expected HH:MM",
+            time_str
+        );
         return None;
     }
 
@@ -42,7 +45,10 @@ pub fn parse_cold_restart_time(time_str: &str) -> Option<(u32, u32)> {
     let minute: u32 = parts[1].parse().ok()?;
 
     if hour > 23 || minute > 59 {
-        log::warn!("Invalid cold restart time '{}' — hour/minute out of range", time_str);
+        log::warn!(
+            "Invalid cold restart time '{}' — hour/minute out of range",
+            time_str
+        );
         return None;
     }
 
@@ -63,7 +69,11 @@ fn already_fired(marker_path: &Path, year: i32, day_of_year: u32) -> bool {
 fn write_marker(marker_path: &Path, year: i32, day_of_year: u32) {
     let today = format!("{}-{}", year, day_of_year);
     if let Err(e) = std::fs::write(marker_path, &today) {
-        log::warn!("Failed to write cold restart marker to {}: {}", marker_path.display(), e);
+        log::warn!(
+            "Failed to write cold restart marker to {}: {}",
+            marker_path.display(),
+            e
+        );
     } else {
         log::info!("Cold restart marker written to {}", marker_path.display());
     }
@@ -93,14 +103,17 @@ pub fn cold_restart_scheduler(
 
     // Marker file: stored in settings dir so it survives container restart
     // if the settings dir is volume-mounted
-    let settings_dir = std::env::var("TWS_SETTINGS_PATH")
-        .unwrap_or_else(|_| "/home/ibgateway/Jts".to_string());
+    let settings_dir =
+        std::env::var("TWS_SETTINGS_PATH").unwrap_or_else(|_| "/home/ibgateway/Jts".to_string());
     let marker_path = PathBuf::from(&settings_dir).join(".ibctl-cold-restart-marker");
 
     let tz = std::env::var("TZ").unwrap_or_else(|_| "(system default)".to_string());
     log::info!(
         "Cold restart timer active: Sundays at {:02}:{:02} (TZ={}, marker={})",
-        target_hour, target_minute, tz, marker_path.display()
+        target_hour,
+        target_minute,
+        tz,
+        marker_path.display()
     );
 
     // Record the minute we started so we can detect "started after target time"
@@ -161,7 +174,8 @@ pub fn cold_restart_scheduler(
             if now.hour == target_hour && now.minute == target_minute {
                 log::info!(
                     "Cold restart firing now (Sunday {:02}:{:02})",
-                    target_hour, target_minute
+                    target_hour,
+                    target_minute
                 );
 
                 // Write marker before sending signal

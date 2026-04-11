@@ -42,7 +42,6 @@ impl LoginHandler {
             login_submitted: AtomicBool::new(false),
         }
     }
-
 }
 
 impl DialogHandler for LoginHandler {
@@ -99,7 +98,10 @@ impl DialogHandler for LoginHandler {
             };
             match client.click_button(window.id, mode_label).await {
                 Ok(true) => log::info!("Selected '{}' mode", mode_label),
-                Ok(false) => log::debug!("'{}' button not found (may already be selected)", mode_label),
+                Ok(false) => log::debug!(
+                    "'{}' button not found (may already be selected)",
+                    mode_label
+                ),
                 Err(e) => log::debug!("Failed to click '{}': {}", mode_label, e),
             }
 

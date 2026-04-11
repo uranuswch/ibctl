@@ -19,7 +19,9 @@ impl DialogHandler for ReloginHandler {
 
     fn can_handle(&self, window: &WindowInfo) -> bool {
         let title = window.title.to_lowercase();
-        title.contains("re-login") || title.contains("relogin") || title.contains("login is required")
+        title.contains("re-login")
+            || title.contains("relogin")
+            || title.contains("login is required")
     }
 
     fn handle<'a>(

@@ -12,7 +12,11 @@ impl StateMachine {
         // Kill any existing socat first
         self.stop_socat();
 
-        log::info!("Starting socat: 0.0.0.0:{} -> 127.0.0.1:{}", socat_port, api_port);
+        log::info!(
+            "Starting socat: 0.0.0.0:{} -> 127.0.0.1:{}",
+            socat_port,
+            api_port
+        );
         match std::process::Command::new("socat")
             .arg(format!("TCP-LISTEN:{},fork,reuseaddr", socat_port))
             .arg(format!("TCP:127.0.0.1:{}", api_port))
@@ -21,11 +25,19 @@ impl StateMachine {
             .spawn()
         {
             Ok(child) => {
-                log::info!("socat started (PID {}): port {} -> {}", child.id(), socat_port, api_port);
+                log::info!(
+                    "socat started (PID {}): port {} -> {}",
+                    child.id(),
+                    socat_port,
+                    api_port
+                );
                 self.socat_process = Some(child);
             }
             Err(e) => {
-                log::error!("Failed to start socat: {} — clients won't be able to connect externally", e);
+                log::error!(
+                    "Failed to start socat: {} — clients won't be able to connect externally",
+                    e
+                );
             }
         }
     }
